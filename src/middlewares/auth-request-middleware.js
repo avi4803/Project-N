@@ -57,6 +57,32 @@ function validateAuthRequest(req, res, next) {
     next();
 }
 
+
+function validateCreateCollegeRequest(req, res, next) {
+    console.log(req.body)
+    
+    if(!req.body.name) {
+        ErrorResponse.message = 'Something went wrong while authenticating user';
+        ErrorResponse.error = new AppError(['College Name not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+   
+
+    if(!req.body.location) {
+        ErrorResponse.message = 'Something went wrong while authenticating user';
+        ErrorResponse.error = new AppError(['location not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+       
+    
+    next();
+}
+
+
 function validateLoginRequest(req, res, next) {
     if(!req.body.email) {
         ErrorResponse.message = 'Something went wrong while authenticating user';
@@ -79,21 +105,38 @@ function validateLoginRequest(req, res, next) {
 }
 
 
-async function checkAuth(req, res, next){
+async function checkAuth(req, res, next) {
     try {
-        const response = await UserService.isAuthenticated(req.headers['x-access-token']);
-        if(response){
-            req.user = response;
+        const userId = await UserService.isAuthenticated(req.headers['x-access-token']);
+        if (userId) {
+            req.user = userId;
             next();
-
         }   
     } catch (error) {
-        console.log('Issue in checkAuth in middleware')
-        return res
-                  .status(error.statusCode)
-                  .json(error)  
+        console.log('Issue in checkAuth in middleware');
+        
+        // Handle specific error cases
+        if (error instanceof AppError) {
+            return res.status(error.statusCode).json({
+                success: false,
+                message: error.explanation,
+                error: {
+                    statusCode: error.statusCode,
+                    explanation: error.explanation
+                }
+            });
+        }
+        
+        // Generic error response
+        return res.status(StatusCodes.UNAUTHORIZED).json({
+            success: false,
+            message: 'Authentication failed',
+            error: {
+                statusCode: StatusCodes.UNAUTHORIZED,
+                explanation: error.message || 'Authentication failed'
+            }
+        });
     }
-
 }
 
 function validateAddRoleRequest(req, res, next) {
@@ -116,27 +159,30 @@ function validateAddRoleRequest(req, res, next) {
     next();
 }
 
-async function isAdmin(req , res, next) {
+async function isAdmin(req, res, next) {
     try {
-        console.log(req.user)
-        const response = await UserService.isAdmin(req.user)   //after sign in req.user = reeponse(authentication using token)
-        if(!response){
-            return res
-                      .status(StatusCodes.UNAUTHORIZED)
-                      .json({message:'user not authorized for the action'});
-    }
+        const adminStatus = await UserService.isAdmin(req.user);
+        if (!adminStatus) {
+            return res.status(StatusCodes.FORBIDDEN).json({
+                success: false,
+                message: 'Access denied. Admin privileges required.',
+                error: {
+                    statusCode: StatusCodes.FORBIDDEN,
+                    explanation: 'You do not have permission to perform this action'
+                }
+            });
+        }
         next();
-        
     } catch (error) {
-        ErrorResponse.message = 'Something went wrong while authenticating isAdmin';
-        ErrorResponse.error = error;
-        return res
-                .status(StatusCodes.INTERNAL_SERVER_ERROR)
-                .json(ErrorResponse);
-       
-        
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: 'Error verifying admin status',
+            error: {
+                statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+                explanation: error.message
+            }
+        });
     }
-    
 }
 
 
@@ -145,5 +191,6 @@ module.exports = {
     checkAuth,
     validateAddRoleRequest,
     isAdmin,
-    validateLoginRequest
+    validateLoginRequest,
+    validateCreateCollegeRequest
 }

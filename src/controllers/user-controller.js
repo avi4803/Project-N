@@ -2,7 +2,7 @@ const {StatusCodes} = require('http-status-codes');
 const {UserService} = require('../services');
 const { ErrorResponse} = require('../utils/');
 const { SuccessResponse } = require('../utils/');
-const bcrypt = require("bcrypt")
+
 
 
 async function signup(req, res) {
@@ -13,7 +13,8 @@ async function signup(req, res) {
             password:req.body.password,
             name:req.body.name,
             batch:req.body.batch,
-            section:req.body.section,   
+            section:req.body.section,
+            collegeEmailId:req.body.collegeEmailId 
         })
         
     SuccessResponse.message = 'Successfully added the user';
