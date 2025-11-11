@@ -1,0 +1,83 @@
+const express = require('express');
+const { TimetableController } = require('../../controllers');
+const { AuthRequestMiddlewares } = require('../../middlewares/');
+
+const router = express.Router();
+
+// Create timetable - Admin/Local-Admin only
+router.post(
+    '/',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin , // or isLocalAdmin
+    TimetableController.createTimetable
+);
+
+// Get timetable by batch and section - Authenticated users
+router.get(
+    '/batch/:batchId/section/:sectionId',
+    AuthRequestMiddlewares.checkAuth,
+    TimetableController.getTimetable
+);
+
+// Get all timetables - Authenticated users
+router.get(
+    '/',
+    AuthRequestMiddlewares.checkAuth,
+    TimetableController.getAllTimetables
+);
+
+// Get timetable by ID - Authenticated users
+router.get(
+    '/:id',
+    AuthRequestMiddlewares.checkAuth,
+    TimetableController.getTimetableById
+);
+
+// Get timetable by day - Authenticated users
+router.get(
+    '/:id/day/:day',
+    AuthRequestMiddlewares.checkAuth,
+    TimetableController.getTimetableByDay
+);
+
+// Get timetables by college - Admin only
+router.get(
+    '/college/:collegeId',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin,
+    TimetableController.getTimetablesByCollege
+);
+
+// Update timetable - Admin/Local-Admin only
+router.patch(
+    '/:id',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin, // or isLocalAdmin
+    TimetableController.updateTimetable
+);
+
+// Add class to timetable - Admin/Local-Admin only
+router.post(
+    '/:id/classes',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin, // or isLocalAdmin
+    TimetableController.addClass
+);
+
+// Remove class from timetable - Admin/Local-Admin only
+router.delete(
+    '/:id/classes/:classId',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin, // or isLocalAdmin
+    TimetableController.removeClass
+);
+
+// Delete timetable - Admin only
+router.delete(
+    '/:id',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin,
+    TimetableController.deleteTimetable
+);
+
+module.exports = router;
