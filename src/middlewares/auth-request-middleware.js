@@ -62,7 +62,7 @@ function validateCreateCollegeRequest(req, res, next) {
     console.log(req.body)
     
     if(!req.body.name) {
-        ErrorResponse.message = 'Something went wrong while authenticating user';
+        ErrorResponse.message = 'Something went wrong while creating college';
         ErrorResponse.error = new AppError(['College Name not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
         return res
                 .status(StatusCodes.BAD_REQUEST)
@@ -71,7 +71,7 @@ function validateCreateCollegeRequest(req, res, next) {
    
 
     if(!req.body.location) {
-        ErrorResponse.message = 'Something went wrong while authenticating user';
+        ErrorResponse.message = 'Something went wrong while creating college';
         ErrorResponse.error = new AppError(['location not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
         return res
                 .status(StatusCodes.BAD_REQUEST)
@@ -81,6 +81,65 @@ function validateCreateCollegeRequest(req, res, next) {
     
     next();
 }
+
+function validateCreateSectionRequest(req, res, next) {
+
+    
+    if(!req.body.name) {
+        ErrorResponse.message = 'Something went wrong while creating Section';
+        ErrorResponse.error = new AppError(['Section Name not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+   
+
+    if(!req.body.batch) {
+        ErrorResponse.message = 'Something went wrong while creating Section';
+        ErrorResponse.error = new AppError(['Batch not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+       
+    
+    next();
+}
+
+
+function validateCreateBatchRequest(req, res, next) {
+
+    
+    if(!req.body.college) {
+        ErrorResponse.message = 'Something went wrong while creating Batch';
+        ErrorResponse.error = new AppError(['College not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+   
+
+    if(!req.body.year) {
+        ErrorResponse.message = 'Something went wrong while creating Batch';
+        ErrorResponse.error = new AppError(['Year not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+    
+    
+    if(!req.body.program) {
+        ErrorResponse.message = 'Something went wrong while creating Batch';
+        ErrorResponse.error = new AppError(['Program not found in the incoming request in the correct form'], StatusCodes.BAD_REQUEST);
+        return res
+                .status(StatusCodes.BAD_REQUEST)
+                .json(ErrorResponse);
+    }
+      
+    
+    next();
+}
+
 
 
 function validateLoginRequest(req, res, next) {
@@ -185,12 +244,42 @@ async function isAdmin(req, res, next) {
     }
 }
 
+async function isLocalAdmin(req, res, next) {
+    try {
+        const adminStatus = await UserService.isLocalAdmin(req.user);
+        if (!adminStatus) {
+            return res.status(StatusCodes.FORBIDDEN).json({
+                success: false,
+                message: 'Access denied. Admin or Local-admin privileges required.',
+                error: {
+                    statusCode: StatusCodes.FORBIDDEN,
+                    explanation: 'You do not have permission to perform this action'
+                }
+            });
+        }
+        next();
+
+    } catch (error) {
+        return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
+            success: false,
+            message: 'Error verifying admin status',
+            error: {
+                statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
+                explanation: error.message
+            }
+        });
+    }
+}
+
 
 module.exports = {
     validateAuthRequest,
     checkAuth,
     validateAddRoleRequest,
     isAdmin,
+    isLocalAdmin,
     validateLoginRequest,
-    validateCreateCollegeRequest
+    validateCreateCollegeRequest,
+    validateCreateSectionRequest,
+    validateCreateBatchRequest
 }

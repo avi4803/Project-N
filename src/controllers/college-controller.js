@@ -1,5 +1,5 @@
 const {StatusCodes} = require('http-status-codes');
-const {CollegeService} = require('../services');
+const {CollegeService, BatchSectionService} = require('../services');
 const { ErrorResponse} = require('../utils/');
 const { SuccessResponse } = require('../utils/');
 

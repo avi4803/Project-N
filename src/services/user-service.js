@@ -176,10 +176,24 @@ async function isAdmin(id) {
   }
 }
 
+async function isLocalAdmin(id) {
+  try {
+    const user = await User.findById(id);
+    if (!user) {
+      throw new AppError('User not found', StatusCodes.NOT_FOUND);
+    }
+    return user.roles.includes('local-admin');
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError('Error checking admin status', StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+}
+
 module.exports = {
   createUser,
   userSignIn,
   isAuthenticated,
   addRoleToUser,
-  isAdmin
+  isAdmin,
+  isLocalAdmin
 };

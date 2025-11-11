@@ -51,8 +51,8 @@ const UserSchema = new mongoose.Schema({
     },
     
     // Academic information
-    batch: { type: String, required: true },
-    section: { type: String, required: true },
+    batch: { type: mongoose.Schema.Types.ObjectId, ref: 'Batch', required: true  },
+    section: { type: mongoose.Schema.Types.ObjectId, ref: 'Section', required: true  },
     
     // Email verification
     isEmailVerified: { type: Boolean, default: false },

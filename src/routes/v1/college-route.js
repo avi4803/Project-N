@@ -11,6 +11,7 @@ router.post('/create',
     AuthRequestMiddlewares.validateCreateCollegeRequest,
     CollegeController.createCollege);
 
+
 module.exports = router;
 
 
