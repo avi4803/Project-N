@@ -244,25 +244,29 @@ async function isAdmin(req, res, next) {
     }
 }
 
-async function isLocalAdmin(req, res, next) {
+async function isAdminOrLocalAdmin(req, res, next) {
     try {
-        const adminStatus = await UserService.isLocalAdmin(req.user);
-        if (!adminStatus) {
+        const userId = req.user; // Set by checkAuth middleware
+        
+        const adminStatus = await UserService.isAdmin(userId);
+        const localAdminStatus = await UserService.isLocalAdmin(userId);
+        
+        if (!adminStatus && !localAdminStatus) {
             return res.status(StatusCodes.FORBIDDEN).json({
                 success: false,
-                message: 'Access denied. Admin or Local-admin privileges required.',
+                message: 'Access denied. Admin or Local-Admin privileges required.',
                 error: {
                     statusCode: StatusCodes.FORBIDDEN,
                     explanation: 'You do not have permission to perform this action'
                 }
             });
         }
+        
         next();
-
     } catch (error) {
         return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
             success: false,
-            message: 'Error verifying admin status',
+            message: 'Error verifying privileges',
             error: {
                 statusCode: StatusCodes.INTERNAL_SERVER_ERROR,
                 explanation: error.message
@@ -271,15 +275,15 @@ async function isLocalAdmin(req, res, next) {
     }
 }
 
-
 module.exports = {
     validateAuthRequest,
-    checkAuth,
-    validateAddRoleRequest,
-    isAdmin,
-    isLocalAdmin,
+    isAdminOrLocalAdmin,
     validateLoginRequest,
     validateCreateCollegeRequest,
     validateCreateSectionRequest,
-    validateCreateBatchRequest
+    validateCreateBatchRequest,
+    isAdmin,
+    checkAuth,
+    validateAddRoleRequest,
+    
 }

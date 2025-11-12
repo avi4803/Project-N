@@ -8,7 +8,7 @@ const router = express.Router();
 router.post(
     '/',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin , // or isLocalAdmin
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     TimetableController.createTimetable
 );
 
@@ -40,11 +40,11 @@ router.get(
     TimetableController.getTimetableByDay
 );
 
-// Get timetables by college - Admin only
+// Get timetables by college - Admin/Local-Admin only
 router.get(
     '/college/:collegeId',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     TimetableController.getTimetablesByCollege
 );
 
@@ -52,7 +52,7 @@ router.get(
 router.patch(
     '/:id',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin, // or isLocalAdmin
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     TimetableController.updateTimetable
 );
 
@@ -60,7 +60,7 @@ router.patch(
 router.post(
     '/:id/classes',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin, // or isLocalAdmin
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     TimetableController.addClass
 );
 
@@ -68,7 +68,7 @@ router.post(
 router.delete(
     '/:id/classes/:classId',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin, // or isLocalAdmin
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     TimetableController.removeClass
 );
 
@@ -76,7 +76,7 @@ router.delete(
 router.delete(
     '/:id',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin,
+    AuthRequestMiddlewares.isAdmin,
     TimetableController.deleteTimetable
 );
 
