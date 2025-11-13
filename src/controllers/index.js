@@ -3,5 +3,6 @@ module.exports = {
     UserController: require('./user-controller'),
     CollegeController: require('./college-controller'),
     BatchSectionController: require('./batch&section-controller'),
-    TimetableController : require('./timetable-controller')
+    TimetableController : require('./timetable-controller'),
+    OcrController : require('./ocr-controller')
 }

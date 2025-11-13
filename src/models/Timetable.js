@@ -30,9 +30,16 @@ const TimetableSchema = new mongoose.Schema({
     required: true 
   },
   schedule: [ClassSchema],
-  validFrom: Date,
+  validFrom: {
+    type: Date,
+    default: Date.now
+  },
   validTo: Date,
-  isActive: { type: Boolean, default: true }
+  isActive: { type: Boolean, default: true },
+  lastUpdated: {
+    type: Date,
+    default: Date.now
+  }
 }, { timestamps: true });
 
 // Compound unique index to prevent duplicate timetables
