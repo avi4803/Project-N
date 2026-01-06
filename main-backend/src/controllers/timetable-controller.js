@@ -2,6 +2,7 @@ const { StatusCodes } = require('http-status-codes');
 const { TimetableService } = require('../services');
 const { ErrorResponse } = require('../utils/');
 const { SuccessResponse } = require('../utils/');
+const { publishNotification } = require('../services/notification-publisher');
 
 // Create new timetable
 async function createTimetable(req, res) {
@@ -137,6 +138,14 @@ async function removeClass(req, res) {
         
         SuccessResponse.data = timetable;
         SuccessResponse.message = 'Class removed successfully';
+        
+        // Notify students of the gap/cancellation
+        publishNotification('CLASS_CANCELLED', {
+            batchId: timetable.batch.toString(),
+            sectionId: timetable.section.toString(),
+            subjectName: 'Class', // Ideally fetch subject name
+            reason: 'Class removed by admin'
+        });
         
         return res.status(StatusCodes.OK).json(SuccessResponse);
         

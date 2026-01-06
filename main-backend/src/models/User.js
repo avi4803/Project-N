@@ -79,6 +79,7 @@ const UserSchema = new mongoose.Schema({
     
     // Account status
     isActive: { type: Boolean, default: true },
+    isEmailVerified: { type: Boolean, default: true }, // Default true for now as we verify before creation
     
     // Additional profile info (optional)
     profilePicture: String,

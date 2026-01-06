@@ -61,7 +61,37 @@ async function createSection(req, res) {
 
 
 
+// Get batches
+async function getBatches(req, res) {
+    try {
+        const batches = await BatchSectionService.getBatches(req.query);
+        SuccessResponse.data = batches;
+        SuccessResponse.message = 'Batches fetched successfully';
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        ErrorResponse.error = error;
+        ErrorResponse.message = error.message || 'Error fetching batches';
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
+// Get sections
+async function getSections(req, res) {
+    try {
+        const sections = await BatchSectionService.getSections(req.query);
+        SuccessResponse.data = sections;
+        SuccessResponse.message = 'Sections fetched successfully';
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        ErrorResponse.error = error;
+        ErrorResponse.message = error.message || 'Error fetching sections';
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
 module.exports = {
     createBatch,
-    createSection
+    createSection,
+    getBatches,
+    getSections
 }

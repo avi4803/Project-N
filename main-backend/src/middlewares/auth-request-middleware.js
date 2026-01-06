@@ -288,7 +288,23 @@ function validateCreateBatchRequest(req, res, next) {
     next();
 }
 
+function validateSignupInitRequest(req, res, next) {
+    if (!req.body.name || !req.body.email || !req.body.password) {
+        ErrorResponse.message = 'Missing required fields';
+        ErrorResponse.error = new AppError(['name, email, and password are required'], StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
 
+function validateSignupVerifyRequest(req, res, next) {
+    if (!req.body.email || !req.body.otp) {
+        ErrorResponse.message = 'Missing required fields';
+        ErrorResponse.error = new AppError(['email and otp are required'], StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
 
 function validateLoginRequest(req, res, next) {
     if(!req.body.email) {
@@ -507,5 +523,7 @@ module.exports = {
     isAdmin,
     checkAuth,
     validateAddRoleRequest,
+    validateSignupInitRequest,
+    validateSignupVerifyRequest
     
 }

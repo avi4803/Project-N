@@ -5,6 +5,7 @@ const Subject = require('../models/Subject');
 const Timetable = require('../models/Timetable');
 const User = require('../models/User');
 const NotificationPublisher = require('../events/notification-publisher');
+const { publishNotification } = require('../services/notification-publisher');
 const mongoose = require('mongoose');
 const { StatusCodes } = require('http-status-codes');
 const AppError = require('../utils/errors/app-error');
@@ -254,9 +255,10 @@ class AttendanceService {
       const attendanceStats = await Attendance.getAttendanceStats(studentId, session.subject._id);
       
       // Send confirmation notification
-      await NotificationPublisher.publish('attendance.marked', {
-        studentId: studentId.toString(),
-        subjectId: session.subject._id.toString(),
+      await NotificationPublisher.publish('ATTENDANCE_MARKED', {
+        userId: studentId.toString(),
+        to: student.email, // Ensure student email is populated
+        name: student.name,
         subjectName: session.subject.name,
         status: 'present',
         date: session.date,
@@ -266,13 +268,13 @@ class AttendanceService {
       
       // Check for low attendance warning
       if (parseFloat(attendanceStats.percentage) < session.subject.attendanceConfig.warningThreshold) {
-        await NotificationPublisher.publish('attendance.low_warning', {
-          studentId: studentId.toString(),
-          subjectId: session.subject._id.toString(),
+        await NotificationPublisher.publish('ATTENDANCE_LOW', {
+          userId: studentId.toString(),
+          to: student.email,
+          name: student.name,
           subjectName: session.subject.name,
           percentage: attendanceStats.percentage,
-          threshold: session.subject.attendanceConfig.warningThreshold,
-          required: session.subject.attendanceConfig.minimumPercentage
+          threshold: session.subject.attendanceConfig.warningThreshold
         });
       }
       
@@ -327,9 +329,24 @@ class AttendanceService {
       if (absentRecords.length > 0) {
         await Attendance.insertMany(absentRecords);
         
-        // Update streaks
+        // Update streaks and notify absent students
         for (const record of absentRecords) {
           await this.updateStreak(record.student, session.subject, false, null);
+          
+          // Notify Absent Student
+          // We need to fetch student details (email/phone) to send notification
+          // Optimization: Could populate earlier or fetch in batch
+          const studentUser = await User.findById(record.student).select('email name phone');
+          if (studentUser && studentUser.email) {
+             await NotificationPublisher.publish('ATTENDANCE_ABSENT', {
+                userId: studentUser._id.toString(),
+                to: studentUser.email,
+                name: studentUser.name,
+                phone: studentUser.phone,
+                subjectName: session.subject.name,
+                date: session.date
+             });
+          }
         }
       }
       
@@ -673,9 +690,37 @@ class AttendanceService {
         if (isPresent) {
           // Increment streak for consecutive class attendance
           await streak.incrementStreak(sessionId);
+          
+          // Notify on milestone (e.g., every 5 days)
+          if (streak.currentStreak % 5 === 0) {
+             const user = await User.findById(studentIdStr).select('email name');
+             if (user && user.email) {
+                 publishNotification('STREAK_MILESTONE', {
+                    userId: user._id.toString(),
+                    to: user.email,
+                    name: user.name,
+                    streakCount: streak.currentStreak,
+                    subjectName: 'Subject' // Ideally fetch subject name
+                 });
+             }
+          }
+
         } else {
           // Break streak on absence
+          const previousStreak = streak.currentStreak;
           await streak.breakStreak();
+          
+          if (previousStreak >= 3) {
+             const user = await User.findById(studentIdStr).select('email name');
+             if (user && user.email) {
+                 publishNotification('STREAK_BROKEN', {
+                    userId: user._id.toString(),
+                    to: user.email,
+                    name: user.name,
+                    previousStreak: previousStreak
+                 });
+             }
+          }
         }
       }
       

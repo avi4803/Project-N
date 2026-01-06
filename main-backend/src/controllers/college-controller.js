@@ -2,6 +2,7 @@ const { StatusCodes } = require('http-status-codes');
 const { CollegeService } = require('../services');
 const { ErrorResponse } = require('../utils/');
 const { SuccessResponse } = require('../utils/');
+const { publishNotification } = require('../services/notification-publisher');
 
 // Create new college
 async function createCollege(req, res) {
@@ -19,6 +20,19 @@ async function createCollege(req, res) {
         
         SuccessResponse.data = college;
         SuccessResponse.message = 'College created successfully';
+        
+        // Notify Admin (using a fixed admin email or fetching super admins)
+        // For now, we'll send to the creator (adminId) if they have an email, 
+        // or a configured system admin email.
+        if (req.user.email) {
+             publishNotification('NEW_REGISTRATION', {
+                userId: req.user.id,
+                to: req.user.email, // notifying the admin who created it
+                name: req.user.name || 'Admin',
+                collegeName: college.name,
+                collegeId: college._id.toString()
+             });
+        }
         
         return res.status(StatusCodes.CREATED).json(SuccessResponse);
         

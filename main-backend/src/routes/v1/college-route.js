@@ -1,6 +1,7 @@
 const express = require('express');
 const { CollegeController } = require('../../controllers');
 const { AuthRequestMiddlewares } = require('../../middlewares');
+const BatchSectionController = require('../../controllers/batch&section-controller');       
 
 const router = express.Router();
 
@@ -15,6 +16,10 @@ router.post(
 
 // Get all colleges - Public or authenticated
 router.get('/', CollegeController.getAllColleges);
+
+// Public routes (used in Signup)
+router.get('/batch', BatchSectionController.getBatches); // Accepts ?collegeId in query
+router.get('/section', BatchSectionController.getSections); // Accepts ?batchId in query
 
 // Get college by ID - Public or authenticated
 router.get('/:collegeId', CollegeController.getCollegeById);

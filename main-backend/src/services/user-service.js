@@ -2,7 +2,10 @@ const { StatusCodes } = require('http-status-codes');
 const AppError = require('../utils/errors/app-error');
 const User = require('../models/User');
 const College = require('../models/College');
+const Batch = require('../models/Batch');
+const Section = require('../models/Section');
 const { Auth } = require('../utils/index');
+const mongoose = require('mongoose');
 
 // Helper function to extract email domain
 function extractEmailDomain(email) {
@@ -45,6 +48,35 @@ async function createUser(data) {
       }
     }
 
+    // Resolve Batch
+    let batchId = data.batch;
+    if (!mongoose.Types.ObjectId.isValid(batchId)) {
+        // Try to find by year and college
+        const batchDoc = await Batch.findOne({ 
+            year: batchId, 
+            college: college._id 
+        });
+        
+        if (!batchDoc) {
+             throw new AppError(`Batch '${batchId}' not found for this college`, StatusCodes.BAD_REQUEST);
+        }
+        batchId = batchDoc._id;
+    }
+
+    // Resolve Section
+    let sectionId = data.section;
+    if (!mongoose.Types.ObjectId.isValid(sectionId)) {
+        const sectionDoc = await Section.findOne({ 
+            name: sectionId, 
+            batch: batchId 
+        });
+        
+        if (!sectionDoc) {
+             throw new AppError(`Section '${sectionId}' not found in batch`, StatusCodes.BAD_REQUEST);
+        }
+        sectionId = sectionDoc._id;
+    }
+
     // Create user (password will be hashed by pre-save hook)
     const user = new User({
       name: data.name,
@@ -52,8 +84,8 @@ async function createUser(data) {
       password: data.password,
       college: college._id,
       collegeId: college.collegeId,
-      batch: data.batch,
-      section: data.section,
+      batch: batchId,
+      section: sectionId,
       roles: ['student']
     });
 

@@ -1,4 +1,5 @@
 const { AttendanceService} = require('../services');
+const { publishNotification } = require('../services/notification-publisher');
 const SuccessResponse = require('../utils/success-response');
 const ErrorResponse = require('../utils/error-response');
 const { StatusCodes } = require('http-status-codes');
@@ -86,6 +87,20 @@ async function markAttendance(req, res) {
 
     SuccessResponse.data = result;
     SuccessResponse.message = 'Attendance marked successfully';
+
+    // Send Notification
+    if (req.user.email) {
+      publishNotification('ATTENDANCE_MARKED', {
+        userId: req.user.id,
+        to: req.user.email,
+        name: req.user.name,
+        sessionId: sessionId,
+        subject: 'Attendance Marked', // Fallback subject
+        // Add other fields needed for Novu template
+        date: new Date().toDateString(),
+        time: new Date().toLocaleTimeString()
+      });
+    }
 
     return res.status(StatusCodes.OK).json(SuccessResponse);
   } catch (error) {
@@ -181,6 +196,20 @@ async function updateAttendance(req, res) {
     SuccessResponse.data = result;
     SuccessResponse.message = 'Attendance updated successfully';
 
+    // Send Notification to the student
+    // result contains the updated attendance record, we need to fetch student email if not populated
+    // Assuming result.student is populated with email based on service logic
+    if (result.student && result.student.email) {
+        publishNotification('CORRECTION_UPDATE', {
+            userId: result.student._id.toString(),
+            to: result.student.email,
+            name: result.student.name,
+            status: status,
+            reason: reason,
+            subjectName: result.subject ? result.subject.name : 'Subject'
+        });
+    }
+    
     return res.status(StatusCodes.OK).json(SuccessResponse);
   } catch (error) {
     ErrorResponse.error = error;

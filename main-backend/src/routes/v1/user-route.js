@@ -8,6 +8,17 @@ router.post('/signup',
     AuthRequestMiddlewares.validateAuthRequest,
     UserController.signup);
 
+// New Signup Flow
+router.post('/signup/init', 
+    AuthRequestMiddlewares.validateSignupInitRequest, 
+    UserController.signupInit);
+
+router.post('/signup/verify', 
+    AuthRequestMiddlewares.validateSignupVerifyRequest,
+    UserController.verifyOtp);
+
+router.post('/signup/complete', UserController.completeProfile);
+
 router.post('/signin',
     AuthRequestMiddlewares.validateLoginRequest,
     UserController.signin);

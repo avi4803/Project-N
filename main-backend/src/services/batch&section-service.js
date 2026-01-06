@@ -82,6 +82,37 @@ async function createBatch(data) {
   }
 }
 
+// Get batches (optionally filtered by collegeId)
+async function getBatches(query) {
+  try {
+    const filter = {};
+    
+    // If collegeId is provided in query, filter by it
+    if (query.collegeId) {
+      if (mongoose.Types.ObjectId.isValid(query.collegeId)) {
+         filter.college = query.collegeId;
+      } else {
+         // If passed ID is custom string ID (like "IIITR"), find the college _id first
+         // Or if 'collegeId' string in model matches
+         const college = await College.findOne({ collegeId: query.collegeId });
+         if (college) {
+             filter.college = college._id;
+         } else {
+             // Return empty if college not found matching custom ID
+             return [];
+         }
+      }
+    }
+
+    const batches = await Batch.find(filter).populate('college', 'name collegeId');
+    return batches;
+
+  } catch (error) {
+    console.log("Error fetching batches:", error.message);
+    throw new AppError('Error fetching batches', StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+}
+
 async function createSection(data) {
   try {
     if (!data.adminId) {
@@ -145,8 +176,35 @@ async function createSection(data) {
   }
 }
 
+// Get sections (optionally filtered by batchId)
+async function getSections(query) {
+  try {
+    const filter = {};
+    if (query.batchId) {
+        // If batchId corresponds to _id
+       if (mongoose.Types.ObjectId.isValid(query.batchId)) {
+        filter.batch = query.batchId;
+       } else {
+         return[]
+           // If 'batch' in query is something else (like year/program), logic is complex without college context.
+           // Assuming frontend sends the Batch's _id selected from the Batch Dropdown.
+           // So minimal logic here: filter by _id if provided.
+       }
+    }
+
+    const sections = await Section.find(filter).populate('batch', 'program year');
+    return sections;
+
+  } catch (error) {
+    console.log("Error fetching sections:", error.message);
+    throw new AppError('Error fetching sections', StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+}
+
 
 module.exports = {
   createBatch,
-  createSection
+  createSection,
+  getBatches,
+  getSections
 };

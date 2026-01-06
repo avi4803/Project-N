@@ -12,7 +12,7 @@ const router = express.Router();
 router.get('/info', InfoController.info);
 router.use('/user', userRouter)
 
-router.use('q', collegeRouter);
+router.use('/college', collegeRouter);
 router.use('/user/admin/batch',BatchSectionRouter );
 router.use('/user/admin/timetable', TimetableRouter );
 router.use('/attendance', attendanceRoutes);
