@@ -15,7 +15,7 @@ class SubjectService {
       console.log(`📋 Processing timetable for Subjects creation: ${timetableId}`);
       const timetable = await Timetable.findById(timetableId)
         .populate('batch')
-        .populate('section')
+        .populate('section');
         
 
       if (!timetable) {
@@ -61,6 +61,9 @@ class SubjectService {
       const createdSubjects = [];
       const updatedSubjects = [];
       const errors = [];
+      
+      // Get college ID from the batch
+      const collegeId = timetable.batch.college;
 
       for (const [subjectName, subjectData] of subjectMap) {
         try {
@@ -75,7 +78,7 @@ class SubjectService {
             name: subjectName,
             batch: timetable.batch._id,
             section: timetable.section._id,
-            college: timetable.college._id,
+            college: collegeId,
             facultyName: subjectData.faculty,
             type: subjectData.type,
             rooms: subjectData.rooms,
@@ -96,7 +99,7 @@ class SubjectService {
             subject.name = subjectName;
             subject.batch = timetable.batch._id;
             subject.section = timetable.section._id;
-            subject.college = timetable.college._id;
+            subject.college = collegeId;
             subject.facultyName = subjectData.faculty;
             subject.type = subjectData.type;
             subject.rooms = subjectData.rooms;

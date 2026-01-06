@@ -398,8 +398,8 @@ class AttendanceService {
         section: student.section,
         date: today,
         status: { $ne: 'cancelled' }
-      })
-        .populate('subject', 'name code')
+        })
+        .populate('subject', 'name code facultyName')
         .sort({ startTime: 1 });
       
       console.log('Sessions found:', sessions.length);
@@ -462,7 +462,7 @@ class AttendanceService {
         startTime: { $lte: currentTime },
         endTime: { $gte: currentTime }
       })
-        .populate('subject', 'name code')
+        .populate('subject', 'name code facultyName')
         .sort({ startTime: 1 })
         .limit(1);
       
@@ -519,7 +519,7 @@ class AttendanceService {
         status: { $in: ['scheduled', 'active'] },
         startTime: { $gt: currentTime }
       })
-        .populate('subject', 'name code')
+        .populate('subject', 'name code facultyName')
         .sort({ startTime: 1 })
         .limit(1);
       
