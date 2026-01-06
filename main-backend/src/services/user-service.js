@@ -221,11 +221,72 @@ async function isLocalAdmin(id) {
   }
 }
 
+// Get aggregated dashboard data for logged-in user
+async function getDashboardData(userId) {
+    try {
+        const user = await User.findById(userId)
+            .populate('college', 'name')
+            .populate('batch', 'program year')
+            .populate('section', 'name');
+
+        if (!user) {
+            throw new AppError('User not found', StatusCodes.NOT_FOUND);
+        }
+
+        // 1. Get Today's Classes
+        const attendanceService = require('./attendance-service');
+        // attendanceService is exported as an instance
+        let todaysClasses = await attendanceService.getTodaysClasses(userId);
+        
+        // DEV MOMENT: If no classes found, try to auto-create them (in case cron didn't run)
+        if (todaysClasses.length === 0) {
+            console.log("⚠️ No sessions found for today. Attempting to auto-create...");
+            await attendanceService.createTodaySessions();
+            todaysClasses = await attendanceService.getTodaysClasses(userId);
+        }
+
+        // 2. Get Next Class
+        const nextClass = await attendanceService.getNextClass(userId);
+
+        // 3. Get Overall Attendance Stats
+        const attendanceStats = await attendanceService.getOverallStats(userId, 'week'); // defaulting to week view or all
+
+        // 4. Get Full Timetable (for reference)
+        const TimetableService = require('./timetable-service');
+        const timetable = await TimetableService.getTimetable(user.batch._id.toString(), user.section._id.toString())
+            .catch(() => null); // If no timetable found, return null without erroring
+
+        return {
+            user: {
+                name: user.name,
+                email: user.email,
+                role: user.roles,
+                college: user.college,
+                batch: user.batch,
+                section: user.section
+            },
+            schedule: {
+                todaysClasses,
+                nextClass,
+                fullTimetable: timetable
+            },
+            attendance: attendanceStats,
+            notifications: [] // Placeholder for now, or fetch from Notification Service if stored
+        };
+
+    } catch (error) {
+        console.log("Error fetching dashboard data:", error);
+        if (error instanceof AppError) throw error;
+        throw new AppError('Error fetching dashboard data', StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+}
+
 module.exports = {
   createUser,
   userSignIn,
   isAuthenticated,
   addRoleToUser,
   isAdmin,
-  isLocalAdmin
+  isLocalAdmin,
+  getDashboardData
 };

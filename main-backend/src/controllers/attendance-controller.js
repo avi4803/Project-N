@@ -9,6 +9,7 @@ const { StatusCodes } = require('http-status-codes');
 /**
  * Get today's classes for logged-in student
  */
+
 async function getTodaysClasses(req, res) {
   try {
     const studentId = req.user.id;

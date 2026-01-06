@@ -202,11 +202,25 @@ async function addRoleToUser(req, res){
     } catch (error) {
         ErrorResponse.error = error;
         return res
-                  .status(error.statusCode)
-                  .json(ErrorResponse)
-        
+                  .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+                  .json(ErrorResponse);
     }
+}
 
+// Get Dashboard Data
+async function getDashboardData(req, res) {
+    try {
+        const userId = req.user; // req.user is the ObjectId set by checkAuth
+        const data = await UserService.getDashboardData(userId);
+        
+        SuccessResponse.data = data;
+        SuccessResponse.message = 'Dashboard data fetched successfully';
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        ErrorResponse.error = error;
+        ErrorResponse.message = error.message || 'Error fetching dashboard data';
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
 }
 
 module.exports = {
@@ -215,6 +229,6 @@ module.exports = {
     addRoleToUser,
     signupInit,
     verifyOtp,
-    completeProfile
-
+    completeProfile,
+    getDashboardData
 }

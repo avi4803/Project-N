@@ -27,10 +27,14 @@ router.post('/role',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdmin,
     AuthRequestMiddlewares.validateAddRoleRequest,
+    AuthRequestMiddlewares.validateAddRoleRequest,
     UserController.addRoleToUser);
 
 
-
+// Dashboard Route
+router.get('/dashboard',
+    AuthRequestMiddlewares.checkAuth,
+    UserController.getDashboardData);
 
 
 module.exports = router ;

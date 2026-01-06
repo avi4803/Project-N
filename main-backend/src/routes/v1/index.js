@@ -4,7 +4,7 @@ const collegeRouter = require('./college-route');
 const BatchSectionRouter = require('./batch&section-route');
 const TimetableRouter = require('./timetable-route')
 const { InfoController } = require('../../controllers');
-const attendanceRoutes = require('./attendance-route'); // ✅ New
+const attendanceRoutes = require('./attendance-route'); 
 const ocrRouter = require('./ocr-route');
 
 const router = express.Router();
