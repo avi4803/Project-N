@@ -5,6 +5,5 @@ module.exports = {
     TimetableService : require('./timetable-service'),
     OcrService : require('./ocr-service'),
     AttendanceService: require('./attendance-service'),
-    SubjectService: require('./subject-service'),
-    OtpService: require('./otp-service')
+    SubjectService: require('./subject-service')
 }

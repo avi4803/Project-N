@@ -10,6 +10,8 @@ const { GEMINI_API_KEY } = require('../config/server-config');
 const mongoose = require('mongoose');
 const axios = require('axios');
 
+
+
 // Initialize Gemini AI with API key from config
 if (!GEMINI_API_KEY) {
   console.error('❌ GEMINI_API_KEY is not configured in environment variables');
@@ -26,6 +28,15 @@ async function processOCRImage(userId, imageUrl, batchId, sectionId) {
     // Validate image URL
     if (!imageUrl || !imageUrl.startsWith('http')) {
       throw new AppError('Invalid image URL provided', StatusCodes.BAD_REQUEST);
+    }
+
+    // Convert Google Drive View links to Direct Download links
+    if (imageUrl.includes('drive.google.com') && imageUrl.includes('/view')) {
+      const fileIdMatch = imageUrl.match(/\/d\/(.+?)\//);
+      if (fileIdMatch && fileIdMatch[1]) {
+        console.log('🔄 Converting Google Drive view link to direct download link...');
+        imageUrl = `https://drive.google.com/uc?export=download&id=${fileIdMatch[1]}`;
+      }
     }
 
     // Validate batch and section
@@ -56,6 +67,7 @@ async function processOCRImage(userId, imageUrl, batchId, sectionId) {
     // Download image from URL
     console.log('📥 Downloading image from:', imageUrl);
     let imageBuffer;
+    let responseHeaders; // Capture headers for MIME detection
     try {
       const response = await axios.get(imageUrl, { 
         responseType: 'arraybuffer',
@@ -65,6 +77,7 @@ async function processOCRImage(userId, imageUrl, batchId, sectionId) {
         }
       });
       imageBuffer = Buffer.from(response.data);
+      responseHeaders = response.headers;
       console.log('✅ Image downloaded successfully, size:', imageBuffer.length, 'bytes');
     } catch (downloadError) {
       console.error('❌ Image download failed:', downloadError.message);
@@ -74,69 +87,113 @@ async function processOCRImage(userId, imageUrl, batchId, sectionId) {
       );
     }
 
-    // Detect image MIME type
-    let mimeType = 'image/jpeg';
-    const urlLower = imageUrl.toLowerCase();
+    // Detect image MIME type from headers or fallback to extension
+    let mimeType = (responseHeaders && responseHeaders['content-type']) || 'image/jpeg';
     
-    if (urlLower.includes('.png')) {
-      mimeType = 'image/png';
-    } else if (urlLower.includes('.webp')) {
-      mimeType = 'image/webp';
-    } else if (urlLower.includes('.gif')) {
-      mimeType = 'image/gif';
+    // Validate MIME type
+    const validMimeTypes = ['image/jpeg', 'image/png', 'image/webp', 'image/heic', 'image/heif'];
+    if (!validMimeTypes.includes(mimeType)) {
+        console.warn(`⚠️ Warning: Content-Type ${mimeType} might not be supported. Defaulting to image/jpeg if problematic.`);
+        // Fallback logic for common misconfigurations
+        if (imageUrl.toLowerCase().endsWith('.png')) mimeType = 'image/png';
+        if (imageUrl.toLowerCase().endsWith('.jpg') || imageUrl.toLowerCase().endsWith('.jpeg')) mimeType = 'image/jpeg';
     }
+
+    console.log(`📷 Detected MIME Type: ${mimeType}`);
 
     console.log('🤖 Initializing Gemini AI model...');
     
     // Detailed prompt for timetable extraction
     const prompt = `
-You are a timetable extraction expert. Analyze the uploaded timetable image and extract ALL class information in strict JSON format.
+You are a university timetable digitization expert.
 
-**IMPORTANT INSTRUCTIONS:**
-1. Extract EVERY class/lecture shown in the image
-2. Map days exactly as shown (Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday)
-3. Use 24-hour time format (e.g., "09:00", "14:30")
-4. If teacher name is not visible, use empty string ""
-5. If room number is not visible, use empty string ""
-6. Classify type as: "Lecture", "Lab", "Tutorial", or "Practical"
-7. Do NOT include any explanatory text, ONLY return valid JSON
+Analyze the uploaded timetable image and extract the COMPLETE class schedule with 100% accuracy.
 
-**Required JSON Structure:**
+The image may contain:
+• rotated pages
+• merged table cells
+• multiple rows per day
+• labs spanning multiple time slots
+• electives and grouped courses
+• teacher and room information in separate tables
+
+Your task is to reconstruct the FULL timetable exactly as it appears.
+
+────────────────────────
+CRITICAL RULES
+────────────────────────
+
+1. Extract **EVERY single class, lab, practical, or tutorial** shown in the timetable grid  
+2. If a class spans multiple time blocks, **merge them into one entry**
+3. Convert all time into **24-hour format** (e.g., "13:30", "16:45")
+4. Map days strictly as:
+   Monday, Tuesday, Wednesday, Thursday, Friday, Saturday, Sunday
+5. If teacher or room is missing, use empty string ""
+6. Detect class type using:
+   • "Lab" → if LAB / practical / multi-hour session
+   • "Lecture" → normal theory class
+   • "Tutorial" → tutorial slot
+   • "Practical" → hands-on non-lab session
+7. If multiple sections or electives appear (like OE, EC-3106, etc), preserve them exactly
+8. Subjects must be written in **full form** if visible anywhere on the page  
+   (e.g., EC-3106 → Digital Signal Processing)
+
+────────────────────────
+OUTPUT FORMAT (STRICT)
+────────────────────────
+
+Return ONLY valid JSON.
+No explanation. No markdown. No comments.
+
+Use this exact structure:
+
 {
+  "college": "",
+  "department": "",
+  "semester": "",
+  "section": "",
+  "classroom": "",
   "schedule": [
     {
       "day": "Monday",
-      "startTime": "09:00",
-      "endTime": "10:00",
-      "subject": "Data Structures",
-      "teacher": "Dr. Sharma",
-      "room": "301",
+      "startTime": "10:30",
+      "endTime": "11:25",
+      "subjectCode": "EC-3006",
+      "subject": "Digital Signal Processing",
+      "teacher": "Dr. Rashmi Panda",
+      "room": "B-403",
       "type": "Lecture"
     },
     {
-      "day": "Monday",
-      "startTime": "10:00",
-      "endTime": "11:00",
-      "subject": "Operating Systems",
-      "teacher": "Prof. Kumar",
-      "room": "302",
-      "type": "Lecture"
+      "day": "Tuesday",
+      "startTime": "11:30",
+      "endTime": "1:30",
+      "subjectCode": "EC-3106",
+      "subject": "Digital Signal Processing Lab(G2)",
+      "teacher": "Dr. Rashmi Panda,Nishit Malviya",
+      "room": "B-403",
+      "type": "Lab"
     }
   ]
 }
 
-**Example for Labs (3-hour sessions):**
-{
-  "day": "Tuesday",
-  "startTime": "09:00",
-  "endTime": "12:00",
-  "subject": "Data Structures Lab",
-  "teacher": "Dr. Sharma",
-  "room": "Lab-1",
-  "type": "Lab"
-}
+────────────────────────
+ADVANCED EXTRACTION RULES
+────────────────────────
 
-Extract the complete timetable now. Return ONLY the JSON, no other text.
+• If a subject code appears multiple times, map it to the correct subject name using the course list table  
+• If a teacher is listed separately, map it to the correct subject  
+• If a lab appears as "EC-3106 / EC-3104 (G1, G2)", create **separate entries** for each group and include group name in the entry
+• If a class appears in two columns, merge them into one entry combining the time slots 
+• If break is shown, IGNORE it  
+• If a time slot is empty, skip it  
+• Do NOT guess — leave unknown fields empty ""
+
+────────────────────────
+
+Extract the complete timetable now.
+Return ONLY the JSON.
+
 `;
 
     // Prepare image part
@@ -187,6 +244,11 @@ Extract the complete timetable now. Return ONLY the JSON, no other text.
             StatusCodes.UNAUTHORIZED
           );
         }
+
+        // If rate limit, log specific warning
+        if (error.status === 429) {
+             console.warn(`⚠️ Rate limit hit for model ${modelName}. Trying next model...`);
+        }
         
         // Continue to next model
         continue;
@@ -196,6 +258,15 @@ Extract the complete timetable now. Return ONLY the JSON, no other text.
     // If no model worked, throw error
     if (!result || !modelUsed) {
       console.error('❌ All models failed. Last error:', lastError?.message);
+      
+      // Handle Rate Limits specifically
+      if (lastError && (lastError.status === 429 || (lastError.message && lastError.message.includes('429')))) {
+          throw new AppError(
+             'Gemini API rate limit exceeded. Please try again later.',
+             StatusCodes.TOO_MANY_REQUESTS
+           );
+      }
+
       throw new AppError(
         'Unable to access Gemini vision models. Please verify your API key or try again later.',
         StatusCodes.SERVICE_UNAVAILABLE
