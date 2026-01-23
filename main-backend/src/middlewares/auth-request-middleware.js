@@ -19,18 +19,22 @@ const { JWT_SECRET } = require('../config/server-config');
 function authenticate(allowedRoles = []) {
   return async (req, res, next) => {
     try {
-      // 1. Check if Authorization header exists
+      // 1. Check if Authorization header exists or x-access-token
       const authHeader = req.headers.authorization;
+      const xAccessToken = req.headers['x-access-token'];
       
-      if (!authHeader || !authHeader.startsWith('Bearer ')) {
+      let token;
+
+      if (authHeader && authHeader.startsWith('Bearer ')) {
+          token = authHeader.split(' ')[1];
+      } else if (xAccessToken) {
+          token = xAccessToken;
+      } else {
         throw new AppError(
           'Authentication required. Please provide a valid token.',
           StatusCodes.UNAUTHORIZED
         );
       }
-
-      // 2. Extract token
-      const token = authHeader.split(' ')[1];
       
       if (!token) {
         throw new AppError(
@@ -139,14 +143,14 @@ function authenticate(allowedRoles = []) {
     } catch (error) {
       // Handle errors
       if (error instanceof AppError) {
-        return res.status(error.statusCode).json(
-          ErrorResponse(error.message, error)
-        );
+          ErrorResponse.message = error.message;
+          ErrorResponse.error = error;
+          return res.status(error.statusCode).json(ErrorResponse);
       }
       
-      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json(
-        ErrorResponse('Authentication failed', error)
-      );
+      ErrorResponse.message = 'Authentication failed';
+      ErrorResponse.error = error;
+      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
     }
   };
 }
@@ -332,10 +336,23 @@ async function checkAuth(req, res, next) {
     try {
         const userId = await UserService.isAuthenticated(req.headers['x-access-token']);
         if (userId) {
-            req.user = userId;
+            const User = require('../models/User');
+            const user = await User.findById(userId)
+                .select('-password')
+                .populate('college batch section');
+
+            if (!user) {
+                throw new AppError('User not found', StatusCodes.UNAUTHORIZED);
+            }
+
+            // Attach string ID for compatibility for existing services
+            req.user = user._id.toString();
+            // Attach full populated user object for new group notification logic
+            req.fullUser = user;
             next();
         }   
     } catch (error) {
+
         console.log('Issue in checkAuth in middleware');
         
         // Handle specific error cases
@@ -470,9 +487,9 @@ function verifySameCollege(req, res, next) {
     
     next();
   } catch (error) {
-    return res.status(error.statusCode || StatusCodes.FORBIDDEN).json(
-      ErrorResponse(error.message, error)
-    );
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.FORBIDDEN).json(ErrorResponse);
   }
 }
 
@@ -500,9 +517,8 @@ function rateLimit(maxRequests = 100, windowMs = 15 * 60 * 1000) {
     }
     
     if (userData.count >= maxRequests) {
-      return res.status(StatusCodes.TOO_MANY_REQUESTS).json(
-        ErrorResponse('Too many requests. Please try again later.')
-      );
+      ErrorResponse.message = 'Too many requests. Please try again later.';
+      return res.status(StatusCodes.TOO_MANY_REQUESTS).json(ErrorResponse);
     }
     
     userData.count++;

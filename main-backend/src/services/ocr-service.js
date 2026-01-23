@@ -389,89 +389,19 @@ Return ONLY the JSON.
 
     console.log('✅ OCR job completed successfully:', job._id);
 
-     // ✅ AUTO-CREATE TIMETABLE AFTER SUCCESSFUL OCR
+    console.log('✅ OCR job completed successfully:', job._id);
+
+    // 🛑 AUTO-CREATION DISABLED via User Request. Waiting for frontend confirmation.
+    // The data is saved in job.parsedTimetable and returned to frontend.
     let createdTimetable = null;
+
+    /* 
+    // PREVIOUS LOGIC (Commented out)
     try {
       console.log('🔄 Auto-creating timetable from OCR results...');
-      
-      // Get college from batch (needed for subjects)
-      const batchWithCollege = await Batch.findById(batchId).select('college');
-      const collegeId = batchWithCollege?.college;
-
-      if (!collegeId) {
-        throw new AppError('Batch does not have an associated college', StatusCodes.BAD_REQUEST);
-      }
-      
-      // Check if timetable already exists
-      const existingTimetable = await Timetable.findOne({
-        batch: batchId,
-        section: sectionId
-      });
-
-      if (existingTimetable) {
-        console.log('⚠️ Timetable already exists, updating instead...');
-        
-        // Update existing timetable
-        existingTimetable.schedule = jsonData.schedule;
-        existingTimetable.validFrom = jsonData.validFrom || new Date();
-        existingTimetable.validTo = jsonData.validTo || null;
-        existingTimetable.isActive = true;
-        existingTimetable.lastUpdated = new Date();
-        existingTimetable.college = collegeId;
-        
-        await existingTimetable.save();
-        createdTimetable = existingTimetable;
-        
-        console.log('✅ Timetable updated successfully:', existingTimetable._id);
-
-        // ✅ AUTO-CREATE SUBJECTS from updated timetable
-        console.log('🔄 Creating/updating subjects from timetable...');
-        const subjectResult = await SubjectService.createSubjectsFromTimetable(existingTimetable._id);
-        
-        console.log(`✅ Subjects processed:
-          - Created: ${subjectResult.created.length}
-          - Updated: ${subjectResult.updated.length}
-          - Failed: ${subjectResult.errors.length}
-        `);
-      } else {
-        // Create new timetable
-        const newTimetable = new Timetable({
-          batch: batchId,
-          section: sectionId,
-          college: collegeId,
-          schedule: jsonData.schedule,
-          validFrom: jsonData.validFrom || new Date(),
-          validTo: jsonData.validTo || null,
-          isActive: true
-        });
-
-        await newTimetable.save();
-        createdTimetable = newTimetable;
-        
-        console.log('✅ New timetable created successfully:', newTimetable._id);
-
-        // ✅ AUTO-CREATE SUBJECTS from new timetable
-        console.log('🔄 Creating subjects from timetable...');
-        const subjectResult = await SubjectService.createSubjectsFromTimetable(newTimetable._id);
-        
-        console.log(`✅ Subjects processed:
-          - Created: ${subjectResult.created.length}
-          - Updated: ${subjectResult.updated.length}
-          - Failed: ${subjectResult.errors.length}
-        `);
-      }
-
-      // Populate timetable
-      await createdTimetable.populate([
-        { path: 'batch', select: 'program year' },
-        { path: 'section', select: 'name' }
-      ]);
-
-    } catch (timetableError) {
-      console.error('⚠️ Failed to auto-create timetable or subjects:', timetableError.message);
-      console.error('Stack trace:', timetableError.stack);
-      // Don't throw error - OCR was successful, timetable creation is bonus
-    }
+      // ... (Code removed/skipped for approval flow) ...
+    } catch (timetableError) { ... }
+    */
 
     // Populate job details before returning
     await job.populate([
@@ -488,21 +418,19 @@ Return ONLY the JSON.
       section: job.section,
       totalClasses: jsonData.schedule.length,
       modelUsed: modelUsed,
-      timetableCreated: createdTimetable ? true : false,
-      timetableId: createdTimetable?._id || null,
-      timetable: createdTimetable || null
+      timetableCreated: false, // Changed to false
+      timetableId: null,
+      timetable: null,
+      message: "OCR processing complete. Please review and confirm the timetable data."
     };
 
   } catch (error) {
     console.error('❌ OCR Processing Error:', error.message);
 
-    // Update job status to failed
+    // CLEANUP: Delete failed job
     if (job) {
-      job.status = 'failed';
-      job.error = error.message || 'Unknown error occurred';
-      job.retryCount += 1;
-      job.completedAt = new Date();
-      await job.save();
+      await OcrJob.findByIdAndDelete(job._id);
+      console.log(`🗑️ OCR Job ${job._id} deleted due to processing failure.`);
     }
 
     // Throw appropriate error
@@ -517,13 +445,11 @@ Return ONLY the JSON.
   }
 }
 
-// Create timetable from OCR job
-async function createTimetableFromOCR(jobId, userId) {
+// Create (Confirm) timetable from OCR job
+async function createTimetableFromOCR(jobId, userId, confirmedSchedule = null) {
   try {
-    const job = await OcrJob.findById(jobId)
-      .populate('batch')
-      .populate('section');
-
+    const job = await OcrJob.findById(jobId);
+      
     if (!job) {
       throw new AppError('OCR job not found', StatusCodes.NOT_FOUND);
     }
@@ -538,39 +464,83 @@ async function createTimetableFromOCR(jobId, userId) {
         StatusCodes.BAD_REQUEST
       );
     }
+    
+    // If confirmed schedule is provided, update the job
+    let finalSchedule = job.parsedTimetable.schedule;
+    if (confirmedSchedule && Array.isArray(confirmedSchedule)) {
+        console.log('📝 Received confirmed schedule from frontend. Updating job...');
+        finalSchedule = confirmedSchedule;
+        
+        job.parsedTimetable.schedule = confirmedSchedule;
+        job.parsedTimetable.isConfirmed = true; // Flag to mark as user-confirmed
+        await job.save();
+    }
+
+    // Get college from batch (needed for subjects)
+    const batchWithCollege = await Batch.findById(job.batch).select('college');
+    const collegeId = batchWithCollege?.college;
+
+    if (!collegeId) {
+        throw new AppError('Batch does not have an associated college', StatusCodes.BAD_REQUEST);
+    }
+
+    let savedTimetable;
 
     const existingTimetable = await Timetable.findOne({
-      batch: job.batch._id,
-      section: job.section._id
+      batch: job.batch,
+      section: job.section
     });
 
     if (existingTimetable) {
-      throw new AppError(
-        'Timetable already exists for this batch and section. Please update instead.',
-        StatusCodes.CONFLICT
-      );
+        console.log('⚠️ Timetable already exists. Updating with confirmed data...');
+        existingTimetable.schedule = finalSchedule;
+        existingTimetable.validFrom = new Date(); // Reset validity
+        existingTimetable.lastUpdated = new Date();
+        existingTimetable.isActive = true;
+        existingTimetable.college = collegeId;
+        
+        await existingTimetable.save();
+        savedTimetable = existingTimetable;
+    } else {
+        console.log('✅ Creating new timetable from confirmed data...');
+        savedTimetable = new Timetable({
+            batch: job.batch,
+            section: job.section,
+            college: collegeId,
+            schedule: finalSchedule,
+            validFrom: new Date(),
+            isActive: true
+        });
+        await savedTimetable.save();
     }
 
-    const timetable = new Timetable({
-      batch: job.batch._id,
-      section: job.section._id,
-      schedule: job.parsedTimetable.schedule,
-      validFrom: job.parsedTimetable.validFrom || new Date(),
-      validTo: job.parsedTimetable.validTo,
-      isActive: true
-    });
-
-    await timetable.save();
-    await timetable.populate([
+    await savedTimetable.populate([
       { path: 'batch', select: 'program year' },
       { path: 'section', select: 'name' }
     ]);
 
-    console.log('✅ Timetable created from OCR job:', timetable._id);
-    return timetable;
+    // ✅ AUTO-CREATE SUBJECTS from confirmed timetable
+    console.log('🔄 Creating/updating subjects from confirmed timetable...');
+    const subjectResult = await SubjectService.createSubjectsFromTimetable(savedTimetable._id);
+        
+    console.log(`✅ Subjects processed:
+          - Created: ${subjectResult.created.length}
+          - Updated: ${subjectResult.updated.length}
+          - Failed: ${subjectResult.errors.length}
+    `);
+
+    // CLEANUP: Delete the completed OCR job
+    await OcrJob.findByIdAndDelete(jobId);
+    console.log(`🗑️ OCR Job ${jobId} deleted from database as it is completed.`);
+
+    return {
+        timetable: savedTimetable,
+        subjectStats: subjectResult
+    };
 
   } catch (error) {
     if (error instanceof AppError) throw error;
+    console.error('Create Timetable Error:', error);
     throw new AppError('Error creating timetable from OCR', StatusCodes.INTERNAL_SERVER_ERROR);
   }
 }

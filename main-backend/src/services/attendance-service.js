@@ -21,90 +21,16 @@ class AttendanceService {
   async createTodaySessions() {
     try {
       const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      const dayName = ['Sunday', 'Monday', 'Tuesday', 'Wednesday', 'Thursday', 'Friday', 'Saturday'][today.getDay()];
-      
-      // Get all active timetables
-      const timetables = await Timetable.find({ isActive: true })
-        .populate('batch section');
-      
-      const sessionsCreated = [];
-      
-      for (const timetable of timetables) {
-        // Get today's classes
-        const todayClasses = timetable.schedule.filter(cls => cls.day === dayName);
-        
-        for (const classItem of todayClasses) {
-          // Find subject
-          const subject = await Subject.findOne({
-            name: classItem.subject,
-            batch: timetable.batch._id,
-            section: timetable.section._id
-          });
-          
-          if (!subject) {
-            console.warn(`Subject not found: ${classItem.subject} for ${timetable.batch.program} ${timetable.section.name}`);
-            continue;
-          }
-          
-          // Get college from subject or batch
-          let collegeId = subject.college;
-          if (!collegeId) {
-            const Batch = require('../models/Batch');
-            const batch = await Batch.findById(timetable.batch._id).select('college');
-            collegeId = batch?.college;
-          }
-          
-          if (!collegeId) {
-            console.warn(`College not found for subject: ${classItem.subject}`);
-            continue;
-          }
-          
-          // Check if session already exists
-          const existing = await AttendanceSession.findOne({
-            subject: subject._id,
-            date: today,
-            startTime: classItem.startTime
-          });
-          
-          if (existing) continue;
-          
-          // Create session with marking open for entire day
-          const endOfDay = new Date(today);
-          endOfDay.setHours(23, 59, 59, 999);
-          
-          const session = await AttendanceSession.create({
-            subject: subject._id,
-            college: collegeId,
-            batch: timetable.batch._id,
-            section: timetable.section._id,
-            date: today,
-            startTime: classItem.startTime,
-            endTime: classItem.endTime,
-            classType: classItem.type?.toLowerCase() || 'lecture',
-            room: classItem.room,
-            autoCreated: true,
-            timetableClassId: classItem._id,
-            status: 'active',
-            isMarkingOpen: true,
-            markingOpenedAt: today,
-            lateMarkingDeadline: endOfDay,
-            allowLateMarking: true
-          });
-          
-          sessionsCreated.push(session);
-        }
-      }
-      
-      console.log(`✅ Created ${sessionsCreated.length} sessions for ${dayName}, ${today.toDateString()}`);
-      return sessionsCreated;
+      const WeeklySessionService = require('./weekly-session-service');
+      console.log(`🚀 Automated Task: Ensuring live sessions exist for today...`);
+      await WeeklySessionService.generateForWeek(today);
+      return { success: true };
     } catch (error) {
-      console.error('Error creating today\'s sessions:', error);
+      console.error(`❌ Error in live session automation:`, error);
       throw error;
     }
   }
-  
+
   /**
    * Auto-activate sessions based on current time
    * Sessions are already active when created, this sends reminders
@@ -186,12 +112,22 @@ class AttendanceService {
       let studentIdStr;
       if (Buffer.isBuffer(studentId)) {
         studentIdStr = studentId.toString('hex');
+      } else if (typeof studentId === 'object' && studentId?._id) {
+        studentIdStr = studentId._id.toString();
       } else {
         studentIdStr = studentId?.toString() || studentId;
       }
       
-      const session = await AttendanceSession.findById(sessionId).populate('subject');
+      let session = await AttendanceSession.findById(sessionId).populate('subject');
       
+      // FALLBACK: Check WeeklySessionClass if standard session not found
+      let isWeeklyClass = false;
+      if (!session) {
+        const WeeklySessionClass = require('../models/WeeklySessionClass');
+        session = await WeeklySessionClass.findById(sessionId).populate('subject');
+        isWeeklyClass = !!session;
+      }
+
       if (!session) {
         throw new AppError('Session not found', StatusCodes.NOT_FOUND);
       }
@@ -202,7 +138,17 @@ class AttendanceService {
       }
       
       // Check if within marking window
-      if (!session.isWithinMarkingWindow()) {
+      // For WeeklySessionClass, we check manually if methods aren't present
+      let withinWindow = false;
+      if (typeof session.isWithinMarkingWindow === 'function') {
+        withinWindow = session.isWithinMarkingWindow();
+      } else {
+        // Validation logic for WeeklySessionClass
+        if (!session.lateMarkingDeadline) withinWindow = true;
+        else withinWindow = new Date() <= new Date(session.lateMarkingDeadline);
+      }
+
+      if (!withinWindow) {
         throw new AppError('Attendance marking deadline has passed', StatusCodes.BAD_REQUEST);
       }
       
@@ -384,26 +330,64 @@ class AttendanceService {
         section: student.section
       });
       
+      const now = new Date();
+      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      console.log('Searching for sessions with:', {
-        batch: student.batch,
-        section: student.section,
-        date: today
+      // After 9:00 PM, show tomorrow's classes as "today"
+      if (currentTime >= "21:00") {
+          today.setDate(today.getDate() + 1);
+          console.log("🌙 Late night: Shifting dashboard view to tomorrow");
+      }
+      
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      
+      console.log('Searching for dashboard sessions in range:', {
+        from: today,
+        to: tomorrow
       });
       
-      const sessions = await AttendanceSession.find({
+      // 1. Fetch from WeeklySessionClass (New Architecture)
+      const WeeklySessionClass = require('../models/WeeklySessionClass');
+      const WeeklySessionService = require('./weekly-session-service');
+      const WeeklySession = require('../models/WeeklySession');
+
+      let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
-        date: today,
-        status: { $ne: 'cancelled' }
-        })
-        .populate('subject', 'name code facultyName')
-        .sort({ startTime: 1 });
-      
-      console.log('Sessions found:', sessions.length);
-      console.log('Sessions:', sessions);
+        date: { $gte: today, $lt: tomorrow }
+      })
+      .populate('subject', 'name code facultyName')
+      .sort({ startTime: 1 });
+
+      if (sessions.length === 0) {
+           const [year, weekNo] = WeeklySessionService.getWeekNumber(today);
+           const sessionContainer = await WeeklySession.findOne({
+               batch: student.batch,
+               section: student.section,
+               year,
+               weekNumber: weekNo
+           });
+
+           if (!sessionContainer) {
+               console.log(`⚠️ No WeeklySession found for Week ${weekNo}, ${year}. Auto-generating...`);
+               await WeeklySessionService.generateForWeek(today);
+               
+               sessions = await WeeklySessionClass.find({
+                    batch: student.batch,
+                    section: student.section,
+                    date: today
+               })
+               .populate('subject', 'name code facultyName')
+               .sort({ startTime: 1 });
+           }
+      }
+
+      const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+      console.log(`Classes found for today (${dayName}): ${sessions.length}`);
       
       // Check attendance status for each session
       const sessionsWithStatus = await Promise.all(
@@ -413,11 +397,17 @@ class AttendanceService {
             session: session._id
           });
           
+          let canMark = false;
+          if (session.isMarkingOpen) {
+                 if (!session.lateMarkingDeadline) canMark = true;
+                 else canMark = new Date() <= new Date(session.lateMarkingDeadline);
+          }
+
           return {
             ...session.toObject(),
             attendanceMarked: !!attendance,
             attendanceStatus: attendance?.status || null,
-            canMark: session.isMarkingOpen && session.isWithinMarkingWindow()
+            canMark: canMark
           };
         })
       );
@@ -438,6 +428,8 @@ class AttendanceService {
       let studentIdStr;
       if (Buffer.isBuffer(studentId)) {
         studentIdStr = studentId.toString('hex');
+      } else if (typeof studentId === 'object' && studentId?._id) {
+        studentIdStr = studentId._id.toString();
       } else {
         studentIdStr = studentId?.toString() || studentId;
       }
@@ -453,11 +445,17 @@ class AttendanceService {
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const sessions = await AttendanceSession.find({
+      const WeeklySessionClass = require('../models/WeeklySessionClass');
+      
+      // 1. Try WeeklySessionClass
+      let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
         date: today,
-        status: 'active',
+        status: 'active', // For weekly class, we might rely on isMarkingOpen=true status? Or string status?
+        // In WeeklySessionClass schema: status enum is ['scheduled', 'cancelled', 'rescheduled', 'completed']
+        // It does NOT have 'active'. It uses `isMarkingOpen` to denote active marking.
+        // So query: isMarkingOpen: true
         isMarkingOpen: true,
         startTime: { $lte: currentTime },
         endTime: { $gte: currentTime }
@@ -465,6 +463,8 @@ class AttendanceService {
         .populate('subject', 'name code facultyName')
         .sort({ startTime: 1 })
         .limit(1);
+
+      console.log('Active Class found:', sessions.length);
       
       if (sessions.length === 0) return null;
       
@@ -476,11 +476,17 @@ class AttendanceService {
         session: session._id
       });
       
+      let canMark = false;
+      if (session.isMarkingOpen) {
+             if (!session.lateMarkingDeadline) canMark = true;
+             else canMark = new Date() <= new Date(session.lateMarkingDeadline);
+      }
+
       return {
         ...session.toObject(),
         attendanceMarked: !!attendance,
         attendanceStatus: attendance?.status || null,
-        canMark: session.isWithinMarkingWindow()
+        canMark: canMark
       };
     } catch (error) {
       if (error instanceof AppError) throw error;
@@ -497,6 +503,8 @@ class AttendanceService {
       let studentIdStr;
       if (Buffer.isBuffer(studentId)) {
         studentIdStr = studentId.toString('hex');
+      } else if (typeof studentId === 'object' && studentId?._id) {
+        studentIdStr = studentId._id.toString();
       } else {
         studentIdStr = studentId?.toString() || studentId;
       }
@@ -507,21 +515,51 @@ class AttendanceService {
       }
       
       const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
+      const actualTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
       
       const today = new Date();
       today.setHours(0, 0, 0, 0);
       
-      const sessions = await AttendanceSession.find({
+      let searchTime = actualTime;
+
+      // After 9:00 PM, treat tomorrow as the "active" day and search from its start
+      if (actualTime >= "21:00") {
+          today.setDate(today.getDate() + 1);
+          searchTime = "00:00"; 
+      }
+
+      const tomorrow = new Date(today);
+      tomorrow.setDate(today.getDate() + 1);
+      
+      const WeeklySessionClass = require('../models/WeeklySessionClass');
+
+      // 1. WeeklySessionClass query - Find the first upcoming class on the active day
+      let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
-        date: today,
-        status: { $in: ['scheduled', 'active'] },
-        startTime: { $gt: currentTime }
+        date: { $gte: today, $lt: tomorrow },
+        status: { $in: ['scheduled', 'rescheduled'] }, 
+        startTime: { $gt: searchTime }
       })
         .populate('subject', 'name code facultyName')
         .sort({ startTime: 1 })
         .limit(1);
+      
+      // 2. If no classes found on the active day, look for the literal next one in future
+      if (sessions.length === 0) {
+          const absoluteTomorrow = new Date(new Date().setHours(0,0,0,0));
+          absoluteTomorrow.setDate(absoluteTomorrow.getDate() + 1);
+
+          sessions = await WeeklySessionClass.find({
+            batch: student.batch,
+            section: student.section,
+            date: { $gte: absoluteTomorrow },
+            status: { $in: ['scheduled', 'rescheduled'] }
+          })
+          .populate('subject', 'name code facultyName')
+          .sort({ date: 1, startTime: 1 })
+          .limit(1);
+      }
       
       return sessions.length > 0 ? sessions[0] : null;
     } catch (error) {

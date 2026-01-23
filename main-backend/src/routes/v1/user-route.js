@@ -37,4 +37,14 @@ router.get('/dashboard',
     UserController.getDashboardData);
 
 
+// Update FCM Token
+router.patch('/fcm-token',
+    AuthRequestMiddlewares.checkAuth,
+    UserController.updateFcmToken);
+
+// Update Reminder Settings
+router.patch('/reminder-settings',
+    AuthRequestMiddlewares.checkAuth,
+    UserController.updateReminderSettings);
+
 module.exports = router ;

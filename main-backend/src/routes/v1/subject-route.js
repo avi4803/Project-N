@@ -17,6 +17,17 @@ router.get(
 );
 
 /**
+ * @route   GET /api/v1/subjects/my-subjects
+ * @desc    Get logged-in user's subjects
+ * @access  Private
+ */
+router.get(
+  '/my-subjects',
+  authenticate(),
+  SubjectController.getMySubjects
+);
+
+/**
  * @route   GET /api/v1/subjects/:id
  * @desc    Get subject by ID
  * @access  Private

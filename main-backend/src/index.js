@@ -19,6 +19,8 @@ app.listen(ServerConfig.PORT, async() => {
     console.log(`Successfully started the server on PORT : ${ServerConfig.PORT}`);
     await connectDB();
     console.log('📦 MongoDB connected successfully');
-    // console.log('🔄 OCR Queue worker is running');
+    require('./workers/reminder-worker');
+    require('./jobs/daily-summary-job');
+    console.log('🔄 Reminder Queue & cron jobs running');
     
 });

@@ -6,6 +6,9 @@ module.exports = {
     TimetableController : require('./timetable-controller'),
     OcrController : require('./ocr-controller'),
     AttendanceController: require('./attendance-controller'),
-    SubjectController: require('./subject-controller')
+    SubjectController: require('./subject-controller'),
+    NotificationController: require('./notification-controller'),
+    BroadcastController: require('./broadcast-controller'),
+    WeeklySessionController: require('./weekly-session-controller')
     
 }

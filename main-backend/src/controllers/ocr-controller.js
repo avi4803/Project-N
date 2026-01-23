@@ -1,12 +1,13 @@
 const { StatusCodes } = require('http-status-codes');
 const { OcrService } = require('../services');
+const User = require('../models/User');
 const { ErrorResponse, SuccessResponse } = require('../utils/');
 
 // Upload and process timetable image
 async function uploadAndProcessTimetable(req, res) {
   try {
     const userId = req.user; // From checkAuth middleware
-    const { imageUrl, batchId, sectionId } = req.body;
+    const { imageUrl } = req.body;
 
     // Validate required fields
     if (!imageUrl) {
@@ -14,12 +15,22 @@ async function uploadAndProcessTimetable(req, res) {
       return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
     }
 
-    if (!batchId || !sectionId) {
-      ErrorResponse.message = 'Batch ID and Section ID are required';
-      return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    // Fetch user to get their batch and section
+    const user = await User.findById(userId);
+    if (!user) {
+        ErrorResponse.message = 'User not found';
+        return res.status(StatusCodes.NOT_FOUND).json(ErrorResponse);
     }
 
-    // Process OCR
+    if (!user.batch || !user.section) {
+        ErrorResponse.message = 'User does not have an assigned batch or section';
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+
+    const batchId = user.batch;
+    const sectionId = user.section;
+
+    // Process OCR with user's batch and section
     const result = await OcrService.processOCRImage(userId, imageUrl, batchId, sectionId);
 
     SuccessResponse.data = result;
@@ -35,16 +46,17 @@ async function uploadAndProcessTimetable(req, res) {
   }
 }
 
-// Create timetable from OCR job
+// Create (Confirm) timetable from OCR job
 async function createTimetableFromOCR(req, res) {
   try {
     const userId = req.user;
     const { jobId } = req.params;
+    const { schedule } = req.body; // Confirmed/Edited schedule from frontend
 
-    const timetable = await OcrService.createTimetableFromOCR(jobId, userId);
+    const result = await OcrService.createTimetableFromOCR(jobId, userId, schedule);
 
-    SuccessResponse.data = timetable;
-    SuccessResponse.message = 'Timetable created successfully from OCR';
+    SuccessResponse.data = result;
+    SuccessResponse.message = 'Timetable confirmed and created successfully';
 
     return res.status(StatusCodes.CREATED).json(SuccessResponse);
 

@@ -1,4 +1,5 @@
 const SubjectService = require('../services/subject-service');
+const User = require('../models/User');
 const SuccessResponse = require('../utils/success-response');
 const ErrorResponse = require('../utils/error-response');
 const { StatusCodes } = require('http-status-codes');
@@ -17,14 +18,39 @@ async function getSubjects(req, res) {
     }
 
     const subjects = await SubjectService.getSubjectsByBatchSection(batchId, sectionId);
-
-    return res.status(StatusCodes.OK).json(
-      SuccessResponse(subjects, 'Subjects fetched successfully')
-    );
+    
+    SuccessResponse.data = subjects;
+    SuccessResponse.message = 'Subjects fetched successfully';
+    return res.status(StatusCodes.OK).json(SuccessResponse);
   } catch (error) {
-    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(
-      ErrorResponse(error.message, error)
-    );
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+  }
+}
+
+/**
+ * Get logged-in user's subjects
+ */
+async function getMySubjects(req, res) {
+  try {
+    const userId = req.user.id;
+    const user = await User.findById(userId);
+
+    if (!user || !user.batch || !user.section) {
+      ErrorResponse.message = 'User does not have a valid batch or section assigned.';
+      return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+
+    const subjects = await SubjectService.getSubjectsByBatchSection(user.batch, user.section);
+
+    SuccessResponse.data = subjects;
+    SuccessResponse.message = 'My subjects fetched successfully';
+    return res.status(StatusCodes.OK).json(SuccessResponse);
+  } catch (error) {
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
   }
 }
 
@@ -36,13 +62,13 @@ async function getSubject(req, res) {
     const { id } = req.params;
     const subject = await SubjectService.getSubjectById(id);
 
-    return res.status(StatusCodes.OK).json(
-      SuccessResponse(subject, 'Subject fetched successfully')
-    );
+    SuccessResponse.data = subject;
+    SuccessResponse.message = 'Subject fetched successfully';
+    return res.status(StatusCodes.OK).json(SuccessResponse);
   } catch (error) {
-    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(
-      ErrorResponse(error.message, error)
-    );
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
   }
 }
 
@@ -54,20 +80,19 @@ async function createSubjectsFromTimetable(req, res) {
     const { timetableId } = req.body;
 
     if (!timetableId) {
-      return res.status(StatusCodes.BAD_REQUEST).json(
-        ErrorResponse('Timetable ID is required')
-      );
+      ErrorResponse.message = 'Timetable ID is required';
+      return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
     }
 
     const result = await SubjectService.createSubjectsFromTimetable(timetableId);
 
-    return res.status(StatusCodes.CREATED).json(
-      SuccessResponse(result, 'Subjects created/updated successfully')
-    );
+    SuccessResponse.data = result;
+    SuccessResponse.message = 'Subjects created/updated successfully';
+    return res.status(StatusCodes.CREATED).json(SuccessResponse);
   } catch (error) {
-    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(
-      ErrorResponse(error.message, error)
-    );
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
   }
 }
 
@@ -79,13 +104,13 @@ async function updateSubject(req, res) {
     const { id } = req.params;
     const subject = await SubjectService.updateSubject(id, req.body);
 
-    return res.status(StatusCodes.OK).json(
-      SuccessResponse(subject, 'Subject updated successfully')
-    );
+    SuccessResponse.data = subject;
+    SuccessResponse.message = 'Subject updated successfully';
+    return res.status(StatusCodes.OK).json(SuccessResponse);
   } catch (error) {
-    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(
-      ErrorResponse(error.message, error)
-    );
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
   }
 }
 
@@ -97,18 +122,19 @@ async function deleteSubject(req, res) {
     const { id } = req.params;
     await SubjectService.deleteSubject(id);
 
-    return res.status(StatusCodes.OK).json(
-      SuccessResponse(null, 'Subject deleted successfully')
-    );
+    SuccessResponse.data = null;
+    SuccessResponse.message = 'Subject deleted successfully';
+    return res.status(StatusCodes.OK).json(SuccessResponse);
   } catch (error) {
-    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(
-      ErrorResponse(error.message, error)
-    );
+    ErrorResponse.message = error.message;
+    ErrorResponse.error = error;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
   }
 }
 
 module.exports = {
   getSubjects,
+  getMySubjects,
   getSubject,
   createSubjectsFromTimetable,
   updateSubject,

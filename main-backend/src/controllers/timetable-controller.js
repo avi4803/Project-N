@@ -120,7 +120,19 @@ async function addClass(req, res) {
         SuccessResponse.data = timetable;
         SuccessResponse.message = 'Class added successfully';
         
+        // 📣 Notify Students of the new permanent class
+        await publishNotification('CLASS_ADDED', {
+            batchId: (timetable.batch._id || timetable.batch).toString(),
+            sectionId: (timetable.section._id || timetable.section).toString(),
+            title: 'Timetable Updated',
+            message: `New class: ${classData.subject} on ${classData.day}s at ${classData.startTime} - ${classData.endTime}`,
+            subjectName: classData.subject,
+            day: classData.day,
+            time: `${classData.startTime} - ${classData.endTime}`
+        });
+
         return res.status(StatusCodes.OK).json(SuccessResponse);
+
         
     } catch (error) {
         ErrorResponse.error = error;
@@ -140,12 +152,15 @@ async function removeClass(req, res) {
         SuccessResponse.message = 'Class removed successfully';
         
         // Notify students of the gap/cancellation
-        publishNotification('CLASS_CANCELLED', {
-            batchId: timetable.batch.toString(),
-            sectionId: timetable.section.toString(),
-            subjectName: 'Class', // Ideally fetch subject name
+        await publishNotification('CLASS_CANCELLED', {
+            batchId: (timetable.batch._id || timetable.batch).toString(),
+            sectionId: (timetable.section._id || timetable.section).toString(),
+            title: 'Class Removed',
+            message: 'A class has been removed from your timetable by the administrator.',
+            subjectName: 'Class',
             reason: 'Class removed by admin'
         });
+
         
         return res.status(StatusCodes.OK).json(SuccessResponse);
         

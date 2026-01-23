@@ -4,33 +4,56 @@ const { publishNotification } = require('../services/notification-publisher');
 
 /**
  * Send a broadcast notification (Emergency or Event)
- * Only accessible by Admins
+ * Supports targeting specific Sections, Batches, or the whole College.
  */
 async function sendBroadcast(req, res) {
     try {
-        const { type, title, message, targetAudience } = req.body;
-        
-        // type: 'EMERGENCY' or 'EVENT'
-        // targetAudience: 'ALL', 'STUDENTS', 'FACULTY' (logic to be handled by consumer or here)
+        const { type, title, message, targetAudience, filterId } = req.body;
         
         if (!title || !message) {
             throw new Error('Title and message are required');
         }
-        
-        const notificationType = type === 'EMERGENCY' ? 'BROADCAST_EMERGENCY' : 'BROADCAST_EVENT';
-        
-        // Publish to queue
-        // The consumer will handle fetching all users and sending notifications via Novu's Topic or Subscriber lists
-        await publishNotification(notificationType, {
+
+        // Prepare group filter payload
+        const notifyPayload = {
             title,
             message,
-            targetAudience: targetAudience || 'ALL',
-            senderId: req.user.id,
-            senderName: req.user.name
-        });
+            senderName: req.fullUser.name,
+            timestamp: new Date().toISOString()
+        };
+
+        // Determine target based on audience and filterId
+        switch (targetAudience) {
+            case 'COLLEGE':
+                notifyPayload.collegeId = req.fullUser.college?._id || req.fullUser.college;
+                break;
+
+            case 'BATCH':
+                notifyPayload.batchId = filterId || req.fullUser.batch?._id || req.fullUser.batch;
+                if (!notifyPayload.batchId) throw new Error('Batch ID is required');
+                break;
+
+            case 'SECTION':
+                notifyPayload.sectionId = filterId || req.fullUser.section?._id || req.fullUser.section;
+                if (!notifyPayload.sectionId) throw new Error('Section ID is required');
+                break;
+
+            case 'FACULTY':
+                notifyPayload.collegeId = req.fullUser.college?._id || req.fullUser.college;
+                notifyPayload.roles = ['admin', 'local-admin'];
+                break;
+            
+            default:
+                throw new Error('Invalid targetAudience. Use COLLEGE, BATCH, SECTION, or FACULTY');
+        }
+
+        const notificationType = type === 'EMERGENCY' ? 'BROADCAST_EMERGENCY' : 'BROADCAST_EVENT';
+
+        // Fire and Forget (Group-aware Publisher handles the lookup)
+        await publishNotification(notificationType, notifyPayload);
         
-        SuccessResponse.message = 'Broadcast queued successfully';
-        SuccessResponse.data = { type, title, targetAudience };
+        SuccessResponse.message = `Broadcast queued for ${targetAudience} targeting`;
+        SuccessResponse.data = { type, audience: targetAudience };
         
         return res.status(StatusCodes.OK).json(SuccessResponse);
         
@@ -40,6 +63,7 @@ async function sendBroadcast(req, res) {
         return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
     }
 }
+
 
 module.exports = {
     sendBroadcast

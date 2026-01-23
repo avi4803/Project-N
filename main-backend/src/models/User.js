@@ -81,10 +81,26 @@ const UserSchema = new mongoose.Schema({
     isActive: { type: Boolean, default: true },
     isEmailVerified: { type: Boolean, default: true }, // Default true for now as we verify before creation
     
+    // Notification Tokens
+    fcmToken: { type: String },
+
     // Additional profile info (optional)
     profilePicture: String,
     phoneNumber: String,
     dateOfBirth: Date,
+    
+    // Personalized Notification Settings
+    reminderSettings: {
+      type: [Number],
+      default: [15],
+      enum: [10, 15, 30]
+    },
+    
+    // Daily Briefing Preference
+    dailySummaryEnabled: {
+      type: Boolean,
+      default: true
+    }
     
 }, { timestamps: true });
 

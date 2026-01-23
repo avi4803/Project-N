@@ -72,6 +72,21 @@ router.delete(
     TimetableController.removeClass
 );
 
+// Blueprint Management APIs (Explicit)
+router.patch(
+    '/:id/blueprint',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    TimetableController.updateTimetable
+);
+
+router.post(
+    '/:id/blueprint/classes',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    TimetableController.addClass
+);
+
 // Delete timetable - Admin only
 router.delete(
     '/:id',

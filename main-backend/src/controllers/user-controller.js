@@ -223,6 +223,64 @@ async function getDashboardData(req, res) {
     }
 }
 
+const AppError = require('../utils/errors/app-error');
+
+async function updateFcmToken(req, res) {
+    try {
+        const userId = req.user; 
+        const { fcmToken, token } = req.body;
+        const registrationToken = fcmToken || token;
+
+        console.log(`📱 Updating FCM Token for user ${userId}. Received body:`, req.body);
+
+        if (!registrationToken) {
+            throw new AppError('FCM Token is required in the request body (as "fcmToken" or "token")', StatusCodes.BAD_REQUEST);
+        }
+
+        const result = await UserService.updateFcmToken(userId, registrationToken);
+
+        
+        // Always reset global singleton responses before use
+        SuccessResponse.data = result;
+        SuccessResponse.message = 'Device registration token (FCM) updated successfully';
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        console.error("Error in updateFcmToken controller:", error.message);
+        
+        // Reset and populate the global error singleton
+        ErrorResponse.message = error.message || 'Failed to update FCM Token';
+        ErrorResponse.error = error.explanation || error;
+        ErrorResponse.data = {}; 
+
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
+async function updateReminderSettings(req, res) {
+    try {
+        const userId = req.user;
+        const { settings, dailySummaryEnabled } = req.body; 
+
+        if (settings !== undefined && !Array.isArray(settings)) {
+            throw new AppError('Settings must be an array', StatusCodes.BAD_REQUEST);
+        }
+        
+        if (dailySummaryEnabled !== undefined && typeof dailySummaryEnabled !== 'boolean') {
+             throw new AppError('dailySummaryEnabled must be a boolean', StatusCodes.BAD_REQUEST);
+        }
+
+        const result = await UserService.updateReminderSettings(userId, settings, dailySummaryEnabled);
+
+        SuccessResponse.data = result;
+        SuccessResponse.message = 'Reminder preferences updated';
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        ErrorResponse.message = error.message || 'Failed to update reminder settings';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
 module.exports = {
     signup,
     signin,
@@ -230,5 +288,7 @@ module.exports = {
     signupInit,
     verifyOtp,
     completeProfile,
-    getDashboardData
+    getDashboardData,
+    updateFcmToken,
+    updateReminderSettings
 }

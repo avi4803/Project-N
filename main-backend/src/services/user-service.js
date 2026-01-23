@@ -233,17 +233,10 @@ async function getDashboardData(userId) {
             throw new AppError('User not found', StatusCodes.NOT_FOUND);
         }
 
-        // 1. Get Today's Classes
+        // 1. Get Today's Classes (handles auto-generation internally)
         const attendanceService = require('./attendance-service');
-        // attendanceService is exported as an instance
         let todaysClasses = await attendanceService.getTodaysClasses(userId);
-        
-        // DEV MOMENT: If no classes found, try to auto-create them (in case cron didn't run)
-        if (todaysClasses.length === 0) {
-            console.log("⚠️ No sessions found for today. Attempting to auto-create...");
-            await attendanceService.createTodaySessions();
-            todaysClasses = await attendanceService.getTodaysClasses(userId);
-        }
+
 
         // 2. Get Next Class
         const nextClass = await attendanceService.getNextClass(userId);
@@ -281,6 +274,55 @@ async function getDashboardData(userId) {
     }
 }
 
+// Update FCM Token for user
+async function updateFcmToken(userId, fcmToken) {
+    try {
+        const user = await User.findByIdAndUpdate(
+            userId,
+            { fcmToken: fcmToken },
+            { new: true }
+        );
+        
+        if (!user) {
+            throw new AppError('User not found', StatusCodes.NOT_FOUND);
+        }
+        
+        return { message: 'FCM Token updated successfully' };
+    } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError('Error updating FCM token', StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+}
+
+// Update Class Reminder Settings
+async function updateReminderSettings(userId, settings, dailySummaryEnabled) {
+    try {
+        const updateData = {};
+        if (settings !== undefined) updateData.reminderSettings = settings;
+        if (dailySummaryEnabled !== undefined) updateData.dailySummaryEnabled = dailySummaryEnabled;
+
+        // settings should be an array of [10, 15, 30] or [] for OFF
+        const user = await User.findByIdAndUpdate(
+            userId,
+            updateData,
+            { new: true, runValidators: true }
+        );
+        
+        if (!user) {
+            throw new AppError('User not found', StatusCodes.NOT_FOUND);
+        }
+        
+        return { 
+            message: 'Reminder settings updated successfully',
+            reminderSettings: user.reminderSettings,
+            dailySummaryEnabled: user.dailySummaryEnabled
+        };
+    } catch (error) {
+        if (error instanceof AppError) throw error;
+        throw new AppError('Error updating reminder settings', StatusCodes.INTERNAL_SERVER_ERROR);
+    }
+}
+
 module.exports = {
   createUser,
   userSignIn,
@@ -288,5 +330,7 @@ module.exports = {
   addRoleToUser,
   isAdmin,
   isLocalAdmin,
-  getDashboardData
+  getDashboardData,
+  updateFcmToken,
+  updateReminderSettings
 };

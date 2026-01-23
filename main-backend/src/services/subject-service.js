@@ -194,9 +194,8 @@ class SubjectService {
         section: sectionId,
         isActive: true
       })
-        .populate('batch', 'program year')
-        .populate('section', 'name')
-        .populate('faculty', 'name email')
+        .select('name facultyName type _id') // Select only required fields
+        .populate('faculty', 'name email') // Keep faculty population if facultyName is just a string fallback
         .sort({ name: 1 });
 
       return subjects;
