@@ -112,6 +112,19 @@ async function addExtraClass(req, res) {
     return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
   }
 }
+async function deleteClass(req, res) {
+  try {
+    const { id } = req.params;
+    const result = await WeeklySessionService.deleteSessionClass(id);
+
+    SuccessResponse.data = result;
+    SuccessResponse.message = 'Class deleted successfully';
+    return res.status(StatusCodes.OK).json(SuccessResponse);
+  } catch (error) {
+    ErrorResponse.message = error.message;
+    return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+  }
+}
 
 module.exports = {
   getCurrentWeekSchedule,
@@ -119,5 +132,6 @@ module.exports = {
   triggerGeneration,
   cancelClass,
   rescheduleClass,
-  addExtraClass
+  addExtraClass,
+  deleteClass
 };

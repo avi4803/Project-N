@@ -216,6 +216,15 @@ class WeeklySessionService {
         throw new AppError('Class is already cancelled', StatusCodes.BAD_REQUEST);
     }
 
+    // Prevent past class modification
+    const classStart = new Date(cls.date);
+    const [h, m] = cls.startTime.split(':').map(Number);
+    classStart.setHours(h, m, 0, 0);
+    
+    if (classStart < new Date()) {
+        throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
+    }
+
     cls.status = 'cancelled';
     cls.cancellationReason = reason;
     await cls.save();
@@ -246,14 +255,28 @@ class WeeklySessionService {
   }
 
   async rescheduleClass(classId, newDate, newStartTime, newEndTime, room, currentUser) {
+    console.log(`🚀 Rescheduling Class ${classId} to ${newDate} ${newStartTime}`);
     const cls = await WeeklySessionClass.findById(classId)
         .populate('subject batch section');
     if (!cls) throw new AppError('Class not found', StatusCodes.NOT_FOUND);
 
     const oldDate = cls.date;
     const oldTime = cls.startTime;
+    
+    // Prevent past class modification
+    const existingStart = new Date(oldDate);
+    const [h, m] = oldTime.split(':').map(Number);
+    existingStart.setHours(h, m, 0, 0);
+    
+    if (existingStart < new Date()) {
+        throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
+    }
+
     const targetDate = new Date(newDate);
     targetDate.setHours(0, 0, 0, 0);
+
+    // Date limit validation handled by middleware
+
 
     // Check if target date is in the same week
     const [currentYear, currentWeek] = this.getWeekNumber(oldDate);
@@ -383,6 +406,9 @@ class WeeklySessionService {
     const dateObj = new Date(date);
     dateObj.setHours(0, 0, 0, 0);
 
+    // Date limit validation handled by middleware
+
+
     const [year, weekNumber] = this.getWeekNumber(dateObj);
     
     let session = await WeeklySession.findOne({
@@ -393,7 +419,44 @@ class WeeklySessionService {
     });
 
     if (!session) {
-      throw new AppError('Weekly session container not found. Please generate schedule first.', StatusCodes.BAD_REQUEST);
+      console.log(`⚠️ Weekly session not found for Week ${weekNumber}, ${year}. Auto-generating...`);
+      await this.generateForWeek(dateObj);
+      
+      // Retry fetch
+      session = await WeeklySession.findOne({
+          batch: batchId,
+          section: sectionId,
+          year,
+          weekNumber
+      });
+
+      if (!session) {
+           console.log(`⚠️ No active timetable found. Creating ad-hoc session container for extra class.`);
+           
+           const batchDoc = await Batch.findById(batchId);
+           if (!batchDoc) throw new AppError('Batch not found', StatusCodes.NOT_FOUND);
+
+           // Calculate Week Start/End
+           const d = new Date(dateObj);
+           const day = d.getDay();
+           const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+           const monday = new Date(d.setDate(diff));
+           monday.setHours(0,0,0,0);
+           
+           const sunday = new Date(monday);
+           sunday.setDate(monday.getDate() + 6);
+           sunday.setHours(23, 59, 59, 999);
+
+           session = await WeeklySession.create({
+            batch: batchId,
+            section: sectionId,
+            college: batchDoc.college,
+            startDate: monday,
+            endDate: sunday,
+            year,
+            weekNumber
+          });
+      }
     }
 
     const subject = await Subject.findById(subjectId);
@@ -436,6 +499,51 @@ class WeeklySessionService {
     this.scheduleReminders(newClass);
 
     return newClass;
+  }
+
+  async deleteSessionClass(classId) {
+    const cls = await WeeklySessionClass.findById(classId).populate('subject batch section');
+    if (!cls) throw new AppError('Class not found', StatusCodes.NOT_FOUND);
+
+    // Safety Check: Don't delete if attendance data exists
+    if (cls.isMarkingOpen || cls.presentCount > 0 || cls.absentCount > 0) {
+        throw new AppError('Cannot delete class that has attendance data or is currently active. Please cancel it instead.', StatusCodes.BAD_REQUEST);
+    }
+
+    // Prevent past class deletion
+    const classStart = new Date(cls.date);
+    const [h, m] = cls.startTime.split(':').map(Number);
+    classStart.setHours(h, m, 0, 0);
+    
+    if (classStart < new Date()) {
+        throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
+    }
+
+    // Cancel reminders
+    await this.cancelReminders(classId);
+
+    // Delete
+    await WeeklySessionClass.findByIdAndDelete(classId);
+
+    // 📣 Notify Section
+    try {
+        const batchId = cls.batch._id.toString();
+        const sectionId = cls.section._id.toString();
+        const dateFormatted = new Date(cls.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+
+        await publishNotification('CLASS_CANCELLED', {
+            batchId,
+            sectionId,
+            title: 'Class Removed',
+            message: `${cls.subject.name} on ${dateFormatted} at ${cls.startTime} has been removed from the schedule.`,
+            subjectName: cls.subject.name,
+            reason: 'Class removed from schedule'
+        });
+    } catch (err) {
+        console.error('Failed to send notification for class deletion:', err);
+    }
+
+    return { message: 'Class deleted successfully' };
   }
 
   async getSessionForWeek(batchId, sectionId, date) {

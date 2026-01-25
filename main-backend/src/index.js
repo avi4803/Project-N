@@ -15,6 +15,10 @@ app.use(express.urlencoded({ extended: true }));
 
 app.use('/api', apiRoutes);
 
+// Global Error Handler (Must be last)
+const globalErrorHandler = require('./middlewares/global-error-handler');
+app.use(globalErrorHandler);
+
 app.listen(ServerConfig.PORT, async() => {
     console.log(`Successfully started the server on PORT : ${ServerConfig.PORT}`);
     await connectDB();

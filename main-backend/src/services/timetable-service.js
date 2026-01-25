@@ -3,6 +3,7 @@ const AppError = require('../utils/errors/app-error');
 const Timetable = require('../models/Timetable');
 const Batch = require('../models/Batch');
 const Section = require('../models/Section');
+const WeeklySessionClass = require('../models/WeeklySessionClass');
 const mongoose = require('mongoose');
 
 // Create new timetable (Admin/Local-Admin only)
@@ -320,12 +321,86 @@ async function addClass(timetableId, classData) {
   }
 }
 
+// Update a single class in timetable (Blueprint Edit)
+async function updateClass(timetableId, classId, updateData) {
+  try {
+    if (!mongoose.Types.ObjectId.isValid(timetableId)) {
+      throw new AppError('Invalid timetable ID', StatusCodes.BAD_REQUEST);
+    }
+
+    const timetable = await Timetable.findById(timetableId);
+    if (!timetable) throw new AppError('Timetable not found', StatusCodes.NOT_FOUND);
+
+    const classDoc = timetable.schedule.id(classId);
+    if (!classDoc) throw new AppError('Class not found in timetable', StatusCodes.NOT_FOUND);
+
+    // Capture old state for response/notification
+    const oldClass = {
+        subject: classDoc.subject,
+        day: classDoc.day,
+        startTime: classDoc.startTime,
+        endTime: classDoc.endTime
+    };
+
+    // Update fields
+    if(updateData.subject) classDoc.subject = updateData.subject;
+    if(updateData.day) classDoc.day = updateData.day;
+    if(updateData.startTime) classDoc.startTime = updateData.startTime;
+    if(updateData.endTime) classDoc.endTime = updateData.endTime;
+    if(updateData.room) classDoc.room = updateData.room;
+    if(updateData.type) classDoc.type = updateData.type;
+    if(updateData.teacher) classDoc.teacher = updateData.teacher;
+
+    await timetable.save();
+
+    // Clean up future sessions derived from this blueprint (Old versions)
+    // The classId (templateId) remains the same, so we just clear future slots 
+    // to allow regeneration or avoid ghost sessions.
+    const deleteResult = await WeeklySessionClass.deleteMany({
+        templateId: classId,
+        date: { $gte: new Date().setHours(0,0,0,0) },
+        status: 'scheduled',
+        isMarkingOpen: false
+    });
+    
+    console.log(`♻️ Updated blueprint class. Removed ${deleteResult.deletedCount} future sessions.`);
+
+    return { 
+        timetable, 
+        oldClass, 
+        newClass: {
+            subject: classDoc.subject,
+            day: classDoc.day,
+            startTime: classDoc.startTime,
+            endTime: classDoc.endTime
+        }
+    };
+
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    console.error(error);
+    throw new AppError('Error updating class in timetable', StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+}
+
 // Remove a class from timetable
 async function removeClass(timetableId, classId) {
   try {
     if (!mongoose.Types.ObjectId.isValid(timetableId)) {
       throw new AppError('Invalid timetable ID', StatusCodes.BAD_REQUEST);
     }
+
+    // Find first to get details
+    const originalTimetable = await Timetable.findById(timetableId);
+    if (!originalTimetable) throw new AppError('Timetable not found', StatusCodes.NOT_FOUND);
+
+    const classDoc = originalTimetable.schedule.id(classId);
+    const removedClassDetails = classDoc ? {
+        subject: classDoc.subject,
+        day: classDoc.day,
+        startTime: classDoc.startTime,
+        endTime: classDoc.endTime
+    } : null;
 
     const timetable = await Timetable.findByIdAndUpdate(
       timetableId,
@@ -336,11 +411,17 @@ async function removeClass(timetableId, classId) {
       { path: 'section', select: 'name' }
     ]);
 
-    if (!timetable) {
-      throw new AppError('Timetable not found', StatusCodes.NOT_FOUND);
-    }
+    // Clean up future scheduled sessions derived from this blueprint
+    const deleteResult = await WeeklySessionClass.deleteMany({
+        templateId: classId,
+        date: { $gte: new Date().setHours(0,0,0,0) }, // From today onwards
+        status: 'scheduled',
+        isMarkingOpen: false // Don't delete if attendance has started
+    });
 
-    return timetable;
+    console.log(`🗑️ Removed ${deleteResult.deletedCount} future sessions linked to blueprint class ${classId}`);
+
+    return { timetable, removedClass: removedClassDetails };
   } catch (error) {
     if (error instanceof AppError) throw error;
     throw new AppError('Error removing class from timetable', StatusCodes.INTERNAL_SERVER_ERROR);
@@ -427,6 +508,7 @@ module.exports = {
   updateTimetable,
   addClass,
   removeClass,
+  updateClass,
   getTimetableByDay,
   deleteTimetable,
   getTimetablesByCollege

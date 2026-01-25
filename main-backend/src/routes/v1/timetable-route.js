@@ -64,6 +64,14 @@ router.post(
     TimetableController.addClass
 );
 
+// Update a specific class in the timetable (Blueprint Edit)
+router.patch(
+    '/:id/classes/:classId',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    TimetableController.updateClass
+);
+
 // Remove class from timetable - Admin/Local-Admin only
 router.delete(
     '/:id/classes/:classId',

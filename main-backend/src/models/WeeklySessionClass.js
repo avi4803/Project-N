@@ -61,6 +61,9 @@ const weeklySessionClassSchema = new mongoose.Schema({
   presentCount: { type: Number, default: 0 },
   absentCount: { type: Number, default: 0 },
 
+  // Soft Delete
+  deletedAt: { type: Date, default: null },
+
 }, { timestamps: true });
 
 // Composite unique index to prevent duplicate class generation for blueprint classes
@@ -72,5 +75,40 @@ weeklySessionClassSchema.index(
 // General index for querying
 weeklySessionClassSchema.index({ weeklySession: 1, date: 1 });
 weeklySessionClassSchema.index({ batch: 1, section: 1, date: 1 });
+
+// Strict Overlap Protection (Idempotency)
+weeklySessionClassSchema.index(
+  { batch: 1, section: 1, date: 1, startTime: 1 }, 
+  { unique: true, name: 'unique_class_slot' }
+);
+
+// --- State Machine Safeguards ---
+
+// Store original status on load to validate transitions
+weeklySessionClassSchema.post('init', function() {
+  this._originalStatus = this.status;
+});
+
+weeklySessionClassSchema.pre('save', function(next) {
+  if (this.isModified('status') && this._originalStatus) {
+    const from = this._originalStatus;
+    const to = this.status;
+    
+    if (from === to) return next();
+
+    const invalidTransitions = {
+      // From : [Blocked To]
+      'cancelled': ['completed'], 
+      'rescheduled': ['scheduled', 'cancelled', 'completed'], // Rescheduled is usually terminal for that specific slot
+      'completed': ['scheduled', 'cancelled', 'rescheduled']
+    };
+
+    if (invalidTransitions[from] && invalidTransitions[from].includes(to)) {
+      const err = new Error(`Invalid status transition from '${from}' to '${to}'`);
+      return next(err);
+    }
+  }
+  next();
+});
 
 module.exports = mongoose.model('WeeklySessionClass', weeklySessionClassSchema);

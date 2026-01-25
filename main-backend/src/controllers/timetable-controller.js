@@ -141,26 +141,59 @@ async function addClass(req, res) {
     }
 }
 
+// Update a single class in timetable
+async function updateClass(req, res) {
+    try {
+        const { id, classId } = req.params;
+        const updateData = req.body;
+        
+        const { timetable, oldClass, newClass } = await TimetableService.updateClass(id, classId, updateData);
+        
+        SuccessResponse.data = timetable;
+        SuccessResponse.message = 'Class updated in blueprint successfully';
+
+        // 📣 Notify: Permanent Shift
+        await publishNotification('CLASS_RESCHEDULED', {
+            batchId: (timetable.batch._id || timetable.batch).toString(),
+            sectionId: (timetable.section._id || timetable.section).toString(),
+            title: 'Timetable Change',
+            message: `PERMANENT SHIFT: ${oldClass.subject} has been moved from ${oldClass.day} ${oldClass.startTime} to ${newClass.day} ${newClass.startTime}.`,
+            subjectName: oldClass.subject,
+            oldTime: `${oldClass.day} ${oldClass.startTime}`,
+            newTime: `${newClass.day} ${newClass.startTime}`,
+            reason: 'Permanent Timetable Update'
+        });
+        
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+        
+    } catch (error) {
+        ErrorResponse.error = error;
+        ErrorResponse.message = error.message || 'Error updating class';
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
 // Remove a class from timetable
 async function removeClass(req, res) {
     try {
         const { id, classId } = req.params;
         
-        const timetable = await TimetableService.removeClass(id, classId);
+        const { timetable, removedClass } = await TimetableService.removeClass(id, classId);
         
         SuccessResponse.data = timetable;
         SuccessResponse.message = 'Class removed successfully';
         
-        // Notify students of the gap/cancellation
-        await publishNotification('CLASS_CANCELLED', {
-            batchId: (timetable.batch._id || timetable.batch).toString(),
-            sectionId: (timetable.section._id || timetable.section).toString(),
-            title: 'Class Removed',
-            message: 'A class has been removed from your timetable by the administrator.',
-            subjectName: 'Class',
-            reason: 'Class removed by admin'
-        });
-
+        // Notify students of the permanent removal
+        if (removedClass) {
+            await publishNotification('CLASS_CANCELLED', {
+                batchId: (timetable.batch._id || timetable.batch).toString(),
+                sectionId: (timetable.section._id || timetable.section).toString(),
+                title: 'Class Permanently Removed',
+                message: `PERMANENTLY REMOVED: ${removedClass.subject} (${removedClass.day} ${removedClass.startTime}) has been removed from your timetable.`,
+                subjectName: removedClass.subject,
+                reason: 'Removed from Timetable Blueprint'
+            });
+        }
         
         return res.status(StatusCodes.OK).json(SuccessResponse);
         
@@ -238,5 +271,6 @@ module.exports = {
     removeClass,
     getTimetableByDay,
     deleteTimetable,
-    getTimetablesByCollege
+    getTimetablesByCollege,
+    updateClass
 };

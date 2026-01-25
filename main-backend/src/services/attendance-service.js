@@ -545,21 +545,7 @@ class AttendanceService {
         .sort({ startTime: 1 })
         .limit(1);
       
-      // 2. If no classes found on the active day, look for the literal next one in future
-      if (sessions.length === 0) {
-          const absoluteTomorrow = new Date(new Date().setHours(0,0,0,0));
-          absoluteTomorrow.setDate(absoluteTomorrow.getDate() + 1);
-
-          sessions = await WeeklySessionClass.find({
-            batch: student.batch,
-            section: student.section,
-            date: { $gte: absoluteTomorrow },
-            status: { $in: ['scheduled', 'rescheduled'] }
-          })
-          .populate('subject', 'name code facultyName')
-          .sort({ date: 1, startTime: 1 })
-          .limit(1);
-      }
+      
       
       return sessions.length > 0 ? sessions[0] : null;
     } catch (error) {
