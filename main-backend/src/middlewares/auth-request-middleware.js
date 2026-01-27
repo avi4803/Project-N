@@ -494,35 +494,44 @@ function verifySameCollege(req, res, next) {
 }
 
 /**
- * Rate limiting middleware (basic implementation)
- * You might want to use express-rate-limit package for production
+ * Rate limiting middleware using Redis for scalability
+ * @param {number} maxRequests - Maximum requests in the window
+ * @param {number} windowMs - Window size in milliseconds
+ * @param {string} routeName - Identifier for the route (to have separate limits)
  */
-const requestCounts = new Map();
+const redis = require('../config/redis-config');
 
-function rateLimit(maxRequests = 100, windowMs = 15 * 60 * 1000) {
-  return (req, res, next) => {
-    const key = req.user ? req.user.id : req.ip;
-    const now = Date.now();
-    
-    if (!requestCounts.has(key)) {
-      requestCounts.set(key, { count: 1, resetTime: now + windowMs });
-      return next();
+function rateLimit(maxRequests = 100, windowMs = 15 * 60 * 1000, routeName = 'global') {
+  return async (req, res, next) => {
+    try {
+      const keyIdentifier = req.user ? (typeof req.user === 'string' ? req.user : req.user.id) : req.ip;
+      const key = `rl:${routeName}:${keyIdentifier}`;
+      
+      const current = await redis.incr(key);
+      
+      if (current === 1) {
+        // First request in this window, set expiry
+        await redis.pexpire(key, windowMs);
+      }
+      
+      if (current > maxRequests) {
+        const ttl = await redis.pttl(key);
+        return res.status(StatusCodes.TOO_MANY_REQUESTS).json({
+          success: false,
+          message: 'Too many requests. Please try again later.',
+          error: {
+            explanation: `Rate limit exceeded for ${routeName}. Try again in ${Math.ceil(ttl / 1000)}s.`,
+            statusCode: StatusCodes.TOO_MANY_REQUESTS
+          }
+        });
+      }
+      
+      next();
+    } catch (error) {
+      console.error('Rate Limit Error:', error);
+      // On redis error, allow request to proceed (fail open) but log it
+      next();
     }
-    
-    const userData = requestCounts.get(key);
-    
-    if (now > userData.resetTime) {
-      requestCounts.set(key, { count: 1, resetTime: now + windowMs });
-      return next();
-    }
-    
-    if (userData.count >= maxRequests) {
-      ErrorResponse.message = 'Too many requests. Please try again later.';
-      return res.status(StatusCodes.TOO_MANY_REQUESTS).json(ErrorResponse);
-    }
-    
-    userData.count++;
-    next();
   };
 }
 

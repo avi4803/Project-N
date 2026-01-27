@@ -11,7 +11,12 @@ const broadcastRouter = require('./broadcast-route');
 const subjectRouter = require('./subject-route');
 const notificationRouter = require('./notification-route');
 
+const { AuthRequestMiddlewares } = require('../../middlewares');
+
 const router = express.Router();
+
+// Apply Global Rate Limit: 300 requests per 15 minutes per IP/User
+router.use(AuthRequestMiddlewares.rateLimit(300, 15 * 60 * 1000, 'global-api'));
 
 router.get('/info', InfoController.info);
 router.use('/user', userRouter)

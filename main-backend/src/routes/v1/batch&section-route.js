@@ -7,13 +7,13 @@ const {AuthRequestMiddlewares} = require('../../middlewares/index')
 // api/v1/admin/colleges/  --POST
 router.post('/section/create',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     AuthRequestMiddlewares.validateCreateSectionRequest,
     BatchSectionController.createSection);
 
 router.post('/create',
     AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdmin || AuthRequestMiddlewares.isLocalAdmin,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     AuthRequestMiddlewares.validateCreateBatchRequest,
     BatchSectionController.createBatch);
 

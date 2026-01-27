@@ -10,16 +10,19 @@ router.post('/signup',
 
 // New Signup Flow
 router.post('/signup/init', 
+    AuthRequestMiddlewares.rateLimit(5, 15 * 60 * 1000, 'auth-signup-init'),
     AuthRequestMiddlewares.validateSignupInitRequest, 
     UserController.signupInit);
 
 router.post('/signup/verify', 
+    AuthRequestMiddlewares.rateLimit(10, 15 * 60 * 1000, 'auth-signup-verify'),
     AuthRequestMiddlewares.validateSignupVerifyRequest,
     UserController.verifyOtp);
 
 router.post('/signup/complete', UserController.completeProfile);
 
 router.post('/signin',
+    AuthRequestMiddlewares.rateLimit(10, 15 * 60 * 1000, 'auth-signin'),
     AuthRequestMiddlewares.validateLoginRequest,
     UserController.signin);
 

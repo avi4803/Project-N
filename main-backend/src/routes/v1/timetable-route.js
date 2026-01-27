@@ -9,6 +9,7 @@ router.post(
     '/',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(5, 15 * 60 * 1000, 'timetable-create'),
     TimetableController.createTimetable
 );
 
@@ -53,6 +54,7 @@ router.patch(
     '/:id',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(10, 15 * 60 * 1000, 'timetable-update'),
     TimetableController.updateTimetable
 );
 
@@ -61,6 +63,7 @@ router.post(
     '/:id/classes',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(20, 15 * 60 * 1000, 'timetable-class-edit'),
     TimetableController.addClass
 );
 
@@ -69,6 +72,7 @@ router.patch(
     '/:id/classes/:classId',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(20, 15 * 60 * 1000, 'timetable-class-edit'),
     TimetableController.updateClass
 );
 
@@ -77,6 +81,7 @@ router.delete(
     '/:id/classes/:classId',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(20, 15 * 60 * 1000, 'timetable-class-edit'),
     TimetableController.removeClass
 );
 

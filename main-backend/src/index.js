@@ -6,6 +6,7 @@ const connectDB = require('./models/index');
 // require('./jobs/ocrJob');
 
 const app = express();
+app.set('trust proxy', 1); // Enable proxy trust for ngrok/docker
 
 // connectDB();
 

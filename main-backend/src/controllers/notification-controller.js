@@ -1,7 +1,7 @@
 const axios = require('axios');
 const { StatusCodes } = require('http-status-codes');
 
-const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://localhost:5000/api/notifications';
+const NOTIFICATION_SERVICE_URL = process.env.NOTIFICATION_SERVICE_URL || 'http://notification-service:3001/api/notifications';
 
 const getMyNotifications = async (req, res) => {
     try {

@@ -8,6 +8,8 @@ const router = express.Router();
 router.post(
     '/process',
     AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(3, 15 * 60 * 1000, 'ocr-process'),
     OcrController.uploadAndProcessTimetable
 );
 
@@ -15,6 +17,7 @@ router.post(
 router.post(
     '/jobs/:jobId/create-timetable',
     AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     OcrController.createTimetableFromOCR
 );
 
@@ -22,6 +25,7 @@ router.post(
 router.get(
     '/jobs/:jobId',
     AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     OcrController.getOCRJobStatus
 );
 
@@ -29,6 +33,7 @@ router.get(
 router.get(
     '/jobs',
     AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
     OcrController.getUserOCRJobs
 );
 
@@ -36,6 +41,8 @@ router.get(
 router.post(
     '/jobs/:jobId/retry',
     AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    AuthRequestMiddlewares.rateLimit(5, 15 * 60 * 1000, 'ocr-retry'),
     OcrController.retryOCRJob
 );
 

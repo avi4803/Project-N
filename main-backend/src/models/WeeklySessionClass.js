@@ -61,6 +61,12 @@ const weeklySessionClassSchema = new mongoose.Schema({
   presentCount: { type: Number, default: 0 },
   absentCount: { type: Number, default: 0 },
 
+  // Numeric Date Components (Timezone Agnostic)
+  dayNum: Number,   // 1-31
+  monthNum: Number, // 1-12
+  yearNum: Number,  // 2026...
+  dateString: String, // "YYYY-MM-DD" - THE Gold Standard for this app
+
   // Soft Delete
   deletedAt: { type: Date, default: null },
 

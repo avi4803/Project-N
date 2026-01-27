@@ -98,6 +98,7 @@ router.get(
 router.put(
   '/:attendanceId/update',
   AuthRequestMiddlewares.checkAuth,
+  AuthRequestMiddlewares.isAdminOrLocalAdmin,
   AttendanceController.updateAttendance
 );
 
@@ -109,6 +110,7 @@ router.put(
 router.post(
   '/admin/create-sessions',
   AuthRequestMiddlewares.checkAuth,
+  AuthRequestMiddlewares.isAdminOrLocalAdmin,
   AttendanceController.createTodaysSessions
 );
 
@@ -120,6 +122,7 @@ router.post(
 router.post(
   '/admin/activate-sessions',
   AuthRequestMiddlewares.checkAuth,
+  AuthRequestMiddlewares.isAdminOrLocalAdmin,
   AttendanceController.activateSessions
 );
 
@@ -131,6 +134,7 @@ router.post(
 router.post(
   '/admin/close-sessions',
   AuthRequestMiddlewares.checkAuth,
+  AuthRequestMiddlewares.isAdminOrLocalAdmin,
   AttendanceController.closeSessions
 );
 

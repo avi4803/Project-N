@@ -330,35 +330,41 @@ class AttendanceService {
         section: student.section
       });
       
+      // --- Timezone Aware Date Calculation (IST) ---
       const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
-      // After 9:00 PM, show tomorrow's classes as "today"
+      // Calculate IST time (UTC + 5.5 hours)
+      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+      const hours = istTime.getUTCHours().toString().padStart(2, '0');
+      const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+      const currentTime = `${hours}:${minutes}`;
+
+      // Calculate Academic "Today" (IST)
+      const today = new Date(istTime);
+      today.setUTCHours(0, 0, 0, 0);
+
+      // After 9:00 PM IST, show tomorrow's classes as "today"
       if (currentTime >= "21:00") {
-          today.setDate(today.getDate() + 1);
-          console.log("🌙 Late night: Shifting dashboard view to tomorrow");
+          today.setUTCDate(today.getUTCDate() + 1);
+          console.log("🌙 Late night (IST): Shifting dashboard view to tomorrow");
       }
-      
+
       const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
+      tomorrow.setUTCDate(today.getUTCDate() + 1);
       
-      console.log('Searching for dashboard sessions in range:', {
-        from: today,
-        to: tomorrow
-      });
+      console.log(`Searching dashboard sessions for IST Date: ${today.toISOString().split('T')[0]}`);
       
       // 1. Fetch from WeeklySessionClass (New Architecture)
       const WeeklySessionClass = require('../models/WeeklySessionClass');
       const WeeklySessionService = require('./weekly-session-service');
       const WeeklySession = require('../models/WeeklySession');
 
+      // Extract numeric components and the dateString from our IST-calculated "today"
+      const istComp = WeeklySessionService.getISTComponents(today);
+
       let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
-        date: { $gte: today, $lt: tomorrow }
+        dateString: istComp.dateString
       })
       .populate('subject', 'name code facultyName')
       .sort({ startTime: 1 });
@@ -514,36 +520,62 @@ class AttendanceService {
         throw new AppError('Student not found', StatusCodes.NOT_FOUND);
       }
       
+      // --- Timezone Aware Date Calculation (IST) ---
       const now = new Date();
-      const actualTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      // Calculate IST time (UTC + 5.5 hours)
+      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
+      const hours = istTime.getUTCHours().toString().padStart(2, '0');
+      const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
+      const actualTime = `${hours}:${minutes}`;
+
+      // Calculate Academic "Today"
+      const today = new Date(istTime);
+      today.setUTCHours(0, 0, 0, 0);
       
       let searchTime = actualTime;
 
-      // After 9:00 PM, treat tomorrow as the "active" day and search from its start
+      // After 9:00 PM IST, treat tomorrow as the "active" day
       if (actualTime >= "21:00") {
-          today.setDate(today.getDate() + 1);
+          today.setUTCDate(today.getUTCDate() + 1);
           searchTime = "00:00"; 
       }
 
       const tomorrow = new Date(today);
-      tomorrow.setDate(today.getDate() + 1);
+      tomorrow.setUTCDate(today.getUTCDate() + 1);
       
       const WeeklySessionClass = require('../models/WeeklySessionClass');
+      const WeeklySessionService = require('./weekly-session-service');
+
+      // Get IST components for our targeted search day
+      const istComp = WeeklySessionService.getISTComponents(today);
 
       // 1. WeeklySessionClass query - Find the first upcoming class on the active day
       let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
-        date: { $gte: today, $lt: tomorrow },
+        dateString: istComp.dateString,
         status: { $in: ['scheduled', 'rescheduled'] }, 
         startTime: { $gt: searchTime }
       })
-        .populate('subject', 'name code facultyName')
-        .sort({ startTime: 1 })
-        .limit(1);
+      .populate('subject', 'name code facultyName')
+      .sort({ startTime: 1 })
+      .limit(1);
+      
+      // If none found for the rest of today, look for the literal next day
+      if (sessions.length === 0) {
+          const nextDay = new Date(today.getTime() + 24 * 60 * 60 * 1000);
+          const nextIstComp = WeeklySessionService.getISTComponents(nextDay);
+          
+          sessions = await WeeklySessionClass.find({
+            batch: student.batch,
+            section: student.section,
+            dateString: nextIstComp.dateString,
+            status: { $in: ['scheduled', 'rescheduled'] }
+          })
+          .populate('subject', 'name code facultyName')
+          .sort({ startTime: 1 })
+          .limit(1);
+      }
       
       
       

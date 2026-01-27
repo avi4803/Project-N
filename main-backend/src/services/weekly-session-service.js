@@ -88,17 +88,21 @@ class WeeklySessionService {
    * Generate weekly sessions for all active timetables for a given start date (Monday)
    */
   async generateForWeek(startDateInput) {
-    const startDate = new Date(startDateInput);
-    startDate.setHours(0, 0, 0, 0);
-
-    // Ensure start date is Monday
-    const day = startDate.getDay();
-    const diff = startDate.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
-    const monday = new Date(startDate.setDate(diff));
+    // --- IST-Aware Week Calculation ---
+    // Force all input to be treated relative to Indian Time
+    const istTime = new Date(startDateInput.getTime() + (5.5 * 60 * 60 * 1000));
+    
+    // Find Monday of the current week in IST
+    const day = istTime.getUTCDay();
+    const diff = istTime.getUTCDate() - day + (day === 0 ? -6 : 1);
+    
+    const monday = new Date(istTime);
+    monday.setUTCDate(diff);
+    monday.setUTCHours(0,0,0,0);
     
     const sunday = new Date(monday);
-    sunday.setDate(monday.getDate() + 6);
-    sunday.setHours(23, 59, 59, 999);
+    sunday.setUTCDate(monday.getUTCDate() + 6);
+    sunday.setUTCHours(23, 59, 59, 999);
 
     const [year, weekNumber] = this.getWeekNumber(monday);
 
@@ -173,6 +177,8 @@ class WeeklySessionService {
                 continue;
             }
 
+            const istComp = this.getISTComponents(classDate);
+
             const newClass = await WeeklySessionClass.create({
                 weeklySession: session._id,
                 templateId: cls._id,
@@ -182,6 +188,10 @@ class WeeklySessionService {
                 section: timetable.section,
                 college: session.college, 
                 date: classDate,
+                dayNum: istComp.day,
+                monthNum: istComp.month,
+                yearNum: istComp.year,
+                dateString: istComp.dateString,
                 day: cls.day,
                 startTime: cls.startTime,
                 endTime: cls.endTime,
@@ -216,12 +226,21 @@ class WeeklySessionService {
         throw new AppError('Class is already cancelled', StatusCodes.BAD_REQUEST);
     }
 
-    // Prevent past class modification
-    const classStart = new Date(cls.date);
+    // Prevent past class modification (Timezone-Agnostic Numeric Validation)
     const [h, m] = cls.startTime.split(':').map(Number);
-    classStart.setHours(h, m, 0, 0);
+    // Construct class start as a local Date object based on stored IST numbers
+    const classStart = new Date(cls.yearNum, cls.monthNum - 1, cls.dayNum, h, m);
     
-    if (classStart < new Date()) {
+    // Construct "Now" in the same local context (Server's current actual time)
+    // If the server and students are in different TZs, we compare actual timestamps
+    // However, the most robust way is to compare absolute epoch timestamps.
+    const now = new Date();
+    
+    // We need to calculate the EXACT timestamp of the class in IST
+    // yearNum, monthNum, dayNum are IST.
+    const classTimestamp = new Date(`${cls.yearNum}-${String(cls.monthNum).padStart(2,'0')}-${String(cls.dayNum).padStart(2,'0')}T${cls.startTime}:00+05:30`);
+
+    if (classTimestamp < now) {
         throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
     }
 
@@ -263,12 +282,10 @@ class WeeklySessionService {
     const oldDate = cls.date;
     const oldTime = cls.startTime;
     
-    // Prevent past class modification
-    const existingStart = new Date(oldDate);
-    const [h, m] = oldTime.split(':').map(Number);
-    existingStart.setHours(h, m, 0, 0);
+    // Prevent past class modification (Timezone-Agnostic Numeric Validation)
+    const classTimestamp = new Date(`${cls.yearNum}-${String(cls.monthNum).padStart(2,'0')}-${String(cls.dayNum).padStart(2,'0')}T${cls.startTime}:00+05:30`);
     
-    if (existingStart < new Date()) {
+    if (classTimestamp < new Date()) {
         throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
     }
 
@@ -327,6 +344,8 @@ class WeeklySessionService {
         // We replicate the original class details but with new date/time
         // Check if subject exists in target week? It should.
         
+        const istComp = this.getISTComponents(targetDate);
+        
         await WeeklySessionClass.create({
             weeklySession: targetSession._id,
             templateId: cls.templateId, // Link to same template if applicable
@@ -336,6 +355,9 @@ class WeeklySessionService {
             section: cls.section._id,
             college: cls.college, // Keep same college
             date: targetDate,
+            dayNum: istComp.day,
+            monthNum: istComp.month,
+            yearNum: istComp.year,
             day: targetDate.toLocaleDateString('en-US', { weekday: 'long' }),
             startTime: newStartTime,
             endTime: newEndTime,
@@ -343,7 +365,6 @@ class WeeklySessionService {
             type: cls.type,
             status: 'scheduled',
             isExtraClass: true, // It's technically an extra/moved class in that week context
-            // Or strictly speaking, if it replaces a blueprint class (unlikely if moving), it acts as extra.
         });
     }
 
@@ -422,7 +443,7 @@ class WeeklySessionService {
       console.log(`⚠️ Weekly session not found for Week ${weekNumber}, ${year}. Auto-generating...`);
       await this.generateForWeek(dateObj);
       
-      // Retry fetch
+      
       session = await WeeklySession.findOne({
           batch: batchId,
           section: sectionId,
@@ -462,6 +483,8 @@ class WeeklySessionService {
     const subject = await Subject.findById(subjectId);
     if(!subject) throw new AppError('Subject not found', StatusCodes.NOT_FOUND);
 
+    const istComp = this.getISTComponents(dateObj);
+
     const newClass = await WeeklySessionClass.create({
         weeklySession: session._id,
         title: subject.name + (type ? ` (${type})` : ''),
@@ -470,6 +493,9 @@ class WeeklySessionService {
         section: sectionId,
         college: session.college,
         date: dateObj,
+        dayNum: istComp.day,
+        monthNum: istComp.month,
+        yearNum: istComp.year,
         day: dateObj.toLocaleDateString('en-US', { weekday: 'long' }),
         startTime,
         endTime,
@@ -510,12 +536,10 @@ class WeeklySessionService {
         throw new AppError('Cannot delete class that has attendance data or is currently active. Please cancel it instead.', StatusCodes.BAD_REQUEST);
     }
 
-    // Prevent past class deletion
-    const classStart = new Date(cls.date);
-    const [h, m] = cls.startTime.split(':').map(Number);
-    classStart.setHours(h, m, 0, 0);
+    // Prevent past class deletion (Timezone-Agnostic Numeric Validation)
+    const classTimestamp = new Date(`${cls.yearNum}-${String(cls.monthNum).padStart(2,'0')}-${String(cls.dayNum).padStart(2,'0')}T${cls.startTime}:00+05:30`);
     
-    if (classStart < new Date()) {
+    if (classTimestamp < new Date()) {
         throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
     }
 
@@ -564,6 +588,17 @@ class WeeklySessionService {
         .sort({ date: 1, startTime: 1 });
 
       return { session, classes };
+  }
+
+  /**
+   * Helper to extract IST day, month, year from any date object
+   * Correctly handles timezone shifts regardless of server location
+   */
+  getISTComponents(date) {
+      const istStr = date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric', day: 'numeric' });
+      const [m, d, y] = istStr.split('/').map(Number);
+      const dateString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
+      return { day: d, month: m, year: y, dateString };
   }
 }
 
