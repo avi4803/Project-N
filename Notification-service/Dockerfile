@@ -5,7 +5,7 @@ WORKDIR /app
 # Copy package.json and package-lock.json
 COPY package*.json ./
 
-# Install dependencies and tzdata for timezone support
+# Install tzdata for timezone support
 RUN apk add --no-cache tzdata
 
 RUN npm install
@@ -13,9 +13,9 @@ RUN npm install
 # Copy source code
 COPY . .
 
-# Expose port (ensure this matches process.env.PORT)
-EXPOSE 3000
+# Expose port (Notification service usually runs on 3001 or similar, check config)
+EXPOSE 3001
 
 # Start command
-CMD ["npm", "run", "dev"] 
+CMD ["npm", "run", "dev"]
 # For production use: CMD ["node", "src/index.js"]

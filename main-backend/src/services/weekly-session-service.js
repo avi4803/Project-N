@@ -9,6 +9,7 @@ const Batch = require('../models/Batch');
 const User = require('../models/User');
 const { publishNotification } = require('./notification-publisher');
 const reminderQueue = require('../config/reminder-queue');
+const CacheService = require('./cache-service');
 
 class WeeklySessionService {
 
@@ -269,6 +270,8 @@ class WeeklySessionService {
         reason
     });
 
+    // 🚀 Invalidate Cache
+    await this.invalidateDashboardCache(cls.batch._id, cls.section._id);
 
     return cls;
   }
@@ -406,6 +409,8 @@ class WeeklySessionService {
         rescheduleType: updateType
     });
 
+    // 🚀 Invalidate Cache
+    await this.invalidateDashboardCache(batchId, sectionId);
 
     return cls;
   }
@@ -524,6 +529,9 @@ class WeeklySessionService {
 
     this.scheduleReminders(newClass);
 
+    // 🚀 Invalidate Cache
+    await this.invalidateDashboardCache(targetBatch, targetSection);
+
     return newClass;
   }
 
@@ -567,6 +575,9 @@ class WeeklySessionService {
         console.error('Failed to send notification for class deletion:', err);
     }
 
+    // 🚀 Invalidate Cache
+    this.invalidateDashboardCache(cls.batch._id, cls.section._id);
+
     return { message: 'Class deleted successfully' };
   }
 
@@ -599,6 +610,36 @@ class WeeklySessionService {
       const [m, d, y] = istStr.split('/').map(Number);
       const dateString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
       return { day: d, month: m, year: y, dateString };
+  }
+
+  /**
+   * Clears the dashboard and next-class cache for all students in a section
+   * Called whenever a class is added, removed, or modified.
+   */
+  async invalidateDashboardCache(batchId, sectionId) {
+      try {
+          // 1. Find all students in this section
+          const students = await User.find({ batch: batchId, section: sectionId }, '_id');
+          if (students.length === 0) return;
+
+          console.log(`🧹 Invalidating cache for ${students.length} students in Section ${sectionId}`);
+
+          // 2. Pattern to clear all date variants (today and future shifts)
+          // We use delByPattern for the specific user's dashboard-related keys
+          const deletePromises = students.map(student => {
+              const id = student._id.toString();
+              return [
+                  CacheService.delByPattern(`user:${id}:dashboard:*`),
+                  CacheService.delByPattern(`user:${id}:next-class:*`),
+                  CacheService.del(`user:${id}:active-class`),
+                  CacheService.del(`user:${id}:full-dashboard`)
+              ];
+          }).flat();
+
+          await Promise.all(deletePromises);
+      } catch (err) {
+          console.error('Failed to invalidate section cache:', err);
+      }
   }
 }
 

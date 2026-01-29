@@ -16,7 +16,8 @@ async function signupInit(req, res) {
         SuccessResponse.data = {}; // Don't return sensitive data
         return res.status(StatusCodes.OK).json(SuccessResponse);
     } catch (error) {
-        console.log("error in signupInit controller", error.message);
+        console.error("❌ signupInit Error:", error.message);
+        ErrorResponse.message = error.message || 'Error initiating signup';
         ErrorResponse.error = error;
         return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
     }
@@ -33,7 +34,8 @@ async function verifyOtp(req, res) {
         SuccessResponse.data = { signupToken: response.signupToken };
         return res.status(StatusCodes.OK).json(SuccessResponse);
     } catch (error) {
-        console.log("error in verifyOtp controller", error.message);
+        console.error("❌ verifyOtp Error:", error.message);
+        ErrorResponse.message = error.message || 'Error verifying OTP';
         ErrorResponse.error = error;
         return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
     }
@@ -98,7 +100,8 @@ async function completeProfile(req, res) {
 
         return res.status(StatusCodes.CREATED).json(SuccessResponse);
     } catch (error) {
-        console.log("error in completeProfile controller", error.message);
+        console.error("❌ completeProfile Error:", error.message);
+        ErrorResponse.message = error.message || 'Error completing profile';
         ErrorResponse.error = error;
         return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
     }
@@ -135,12 +138,12 @@ async function signup(req, res) {
                   .status(StatusCodes.CREATED)
                   .json(SuccessResponse);
     } catch (error) {
-        console.log("error in signup controller", error.message)
+        console.error("❌ signup Error:", error.message)
+        ErrorResponse.message = error.message || 'Error during signup';
         ErrorResponse.error = error;
         return res
-                 .status(error.statusCode)
+                 .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
                  .json(ErrorResponse)
-        
     }
     
 }
@@ -163,11 +166,12 @@ async function signin(req, res){
 
         
     } catch (error) {
+        console.error('❌ Signin Controller Error:', error.message);
+        ErrorResponse.message = error.message || 'Something went wrong during sign in';
         ErrorResponse.error = error;
         return res
-                  .status(error.statusCode)
+                  .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
                   .json(ErrorResponse)
-        
     }
 }
 
@@ -200,6 +204,8 @@ async function addRoleToUser(req, res){
 
         
     } catch (error) {
+        console.error("❌ addRoleToUser Error:", error.message);
+        ErrorResponse.message = error.message || 'Error adding role to user';
         ErrorResponse.error = error;
         return res
                   .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
@@ -281,6 +287,49 @@ async function updateReminderSettings(req, res) {
     }
 }
 
+async function forgotPassword(req, res) {
+    try {
+        const result = await OtpService.initiatePasswordReset(req.body.email);
+        SuccessResponse.message = result.message;
+        SuccessResponse.data = {};
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        console.error("❌ forgotPassword Error:", error.message);
+        ErrorResponse.message = error.message || 'Error initiating password reset';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
+async function verifyResetOtp(req, res) {
+    try {
+        const result = await OtpService.verifyResetOtp(req.body.email, req.body.otp);
+        SuccessResponse.message = result.message;
+        SuccessResponse.data = { resetToken: result.resetToken };
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        console.error("❌ verifyResetOtp Error:", error.message);
+        ErrorResponse.message = error.message || 'Error verifying reset OTP';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
+async function resetPassword(req, res) {
+    try {
+        // req.userId is set by validateResetToken middleware
+        const result = await UserService.resetUserPassword(req.userId, req.body.password);
+        SuccessResponse.message = result.message;
+        SuccessResponse.data = {};
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        console.error("❌ resetPassword Error:", error.message);
+        ErrorResponse.message = error.message || 'Error resetting password';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
+
 module.exports = {
     signup,
     signin,
@@ -290,5 +339,8 @@ module.exports = {
     completeProfile,
     getDashboardData,
     updateFcmToken,
-    updateReminderSettings
+    updateReminderSettings,
+    forgotPassword,
+    verifyResetOtp,
+    resetPassword
 }

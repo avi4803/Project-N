@@ -1,0 +1,63 @@
+version: '3.8'
+
+services:
+  # Redis Service
+  redis:
+    image: redis:alpine
+    container_name: project_n_redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    environment:
+      - TZ=Asia/Kolkata
+    restart: always
+
+  # Main Backend Service
+  main-backend:
+    build:
+      context: ./main-backend
+      dockerfile: Dockerfile
+    container_name: project_n_backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TZ=Asia/Kolkata
+      # Pass other env vars from host .env or define here
+      # You should ensure MONGO_URI is accessible (e.g., host.docker.internal for local)
+    env_file:
+      - ./main-backend/.env
+    depends_on:
+      - redis
+    restart: always
+    volumes:
+      - ./main-backend:/app
+      - /app/node_modules
+
+  # Notification Service
+  notification-service:
+    build:
+      context: ./Notification-service
+      dockerfile: Dockerfile
+    container_name: project_n_notification
+    ports:
+      - "3001:3001" # Assuming default or assigning one
+    environment:
+      - PORT=3001
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TZ=Asia/Kolkata
+    env_file:
+      - ./Notification-service/.env
+    depends_on:
+      - redis
+    restart: always
+    volumes:
+      - ./Notification-service:/app
+      - /app/node_modules
+
+volumes:
+  redis_data:

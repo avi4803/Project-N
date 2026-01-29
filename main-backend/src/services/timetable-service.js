@@ -5,6 +5,7 @@ const Batch = require('../models/Batch');
 const Section = require('../models/Section');
 const WeeklySessionClass = require('../models/WeeklySessionClass');
 const mongoose = require('mongoose');
+const CacheService = require('./cache-service');
 
 // Create new timetable (Admin/Local-Admin only)
 async function createTimetable(data) {
@@ -105,6 +106,13 @@ async function createTimetable(data) {
 // Get timetable by batch and section
 async function getTimetable(batchId, sectionId) {
   try {
+    // --- 1. REDIS CACHE CHECK ---
+    const bId = batchId.toString();
+    const sId = sectionId.toString();
+    const cacheKey = `tt:${bId}:${sId}`;
+    const cachedTT = await CacheService.get(cacheKey);
+    if (cachedTT) return cachedTT;
+
     // Find batch
     let batch;
     if (mongoose.Types.ObjectId.isValid(batchId) && batchId.length === 24) {
@@ -143,6 +151,9 @@ async function getTimetable(batchId, sectionId) {
     if (!timetable) {
       throw new AppError('Timetable not found for this batch and section', StatusCodes.NOT_FOUND);
     }
+
+    // --- 2. SAVE TO CACHE (TTL: 1 Hour) ---
+    await CacheService.set(cacheKey, timetable, 3600);
 
     return timetable;
     

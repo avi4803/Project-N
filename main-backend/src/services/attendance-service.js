@@ -9,6 +9,10 @@ const { publishNotification } = require('../services/notification-publisher');
 const mongoose = require('mongoose');
 const { StatusCodes } = require('http-status-codes');
 const AppError = require('../utils/errors/app-error');
+const CacheService = require('./cache-service');
+const WeeklySessionClass = require('../models/WeeklySessionClass');
+const WeeklySession = require('../models/WeeklySession');
+const WeeklySessionService = require('./weekly-session-service');
 
 class AttendanceService {
   
@@ -224,6 +228,15 @@ class AttendanceService {
         });
       }
       
+      // 🚀 Invalidate Cache for this specific student
+      const id = studentIdStr;
+      await Promise.all([
+          CacheService.delByPattern(`user:${id}:dashboard:*`),
+          CacheService.delByPattern(`user:${id}:next-class:*`),
+          CacheService.del(`user:${id}:active-class`),
+          CacheService.del(`user:${id}:full-dashboard`)
+      ]);
+
       return {
         attendance,
         stats: attendanceStats,
@@ -330,37 +343,25 @@ class AttendanceService {
         section: student.section
       });
       
-      // --- Timezone Aware Date Calculation (IST) ---
+      // --- Reliable IST Timezone Logic ---
       const now = new Date();
-      // Calculate IST time (UTC + 5.5 hours)
-      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-      const hours = istTime.getUTCHours().toString().padStart(2, '0');
-      const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
-      const currentTime = `${hours}:${minutes}`;
-
-      // Calculate Academic "Today" (IST)
-      const today = new Date(istTime);
-      today.setUTCHours(0, 0, 0, 0);
-
-      // After 9:00 PM IST, show tomorrow's classes as "today"
-      if (currentTime >= "21:00") {
-          today.setUTCDate(today.getUTCDate() + 1);
-          console.log("🌙 Late night (IST): Shifting dashboard view to tomorrow");
-      }
-
-      const tomorrow = new Date(today);
-      tomorrow.setUTCDate(today.getUTCDate() + 1);
-      
-      console.log(`Searching dashboard sessions for IST Date: ${today.toISOString().split('T')[0]}`);
-      
-      // 1. Fetch from WeeklySessionClass (New Architecture)
-      const WeeklySessionClass = require('../models/WeeklySessionClass');
       const WeeklySessionService = require('./weekly-session-service');
+      const WeeklySessionClass = require('../models/WeeklySessionClass');
       const WeeklySession = require('../models/WeeklySession');
 
-      // Extract numeric components and the dateString from our IST-calculated "today"
-      const istComp = WeeklySessionService.getISTComponents(today);
+      // 1. Get current IST components
+      const istComp = WeeklySessionService.getISTComponents(now);
 
+      // --- 4. REDIS CACHE CHECK ---
+      const cacheKey = `user:${studentIdStr}:dashboard:${istComp.dateString}`;
+      const cachedData = await CacheService.get(cacheKey);
+      if (cachedData) {
+          console.log(`🚀 Serving Dashboard from Cache for user ${studentIdStr}`);
+          return cachedData;
+      }
+      
+      console.log(`Searching dashboard sessions for IST Date: ${istComp.dateString}`);
+      
       let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
@@ -370,7 +371,7 @@ class AttendanceService {
       .sort({ startTime: 1 });
 
       if (sessions.length === 0) {
-           const [year, weekNo] = WeeklySessionService.getWeekNumber(today);
+           const [year, weekNo] = WeeklySessionService.getWeekNumber(now);
            const sessionContainer = await WeeklySession.findOne({
                batch: student.batch,
                section: student.section,
@@ -380,19 +381,19 @@ class AttendanceService {
 
            if (!sessionContainer) {
                console.log(`⚠️ No WeeklySession found for Week ${weekNo}, ${year}. Auto-generating...`);
-               await WeeklySessionService.generateForWeek(today);
+               await WeeklySessionService.generateForWeek(now);
                
-               sessions = await WeeklySessionClass.find({
-                    batch: student.batch,
-                    section: student.section,
-                    date: today
-               })
-               .populate('subject', 'name code facultyName')
-               .sort({ startTime: 1 });
+                sessions = await WeeklySessionClass.find({
+                     batch: student.batch,
+                     section: student.section,
+                     dateString: istComp.dateString
+                })
+                .populate('subject', 'name code facultyName')
+                .sort({ startTime: 1 });
            }
       }
 
-      const dayName = today.toLocaleDateString('en-US', { weekday: 'long' });
+      const dayName = now.toLocaleDateString('en-US', { weekday: 'long', timeZone: 'Asia/Kolkata' });
       console.log(`Classes found for today (${dayName}): ${sessions.length}`);
       
       // Check attendance status for each session
@@ -417,6 +418,9 @@ class AttendanceService {
           };
         })
       );
+      
+      // --- 5. SAVE TO CACHE (TTL: 5 minutes) ---
+      await CacheService.set(cacheKey, sessionsWithStatus, 300);
       
       return sessionsWithStatus;
     } catch (error) {
@@ -445,23 +449,28 @@ class AttendanceService {
         throw new AppError('Student not found', StatusCodes.NOT_FOUND);
       }
       
+      // --- Reliable IST Timezone Logic ---
       const now = new Date();
-      const currentTime = `${now.getHours().toString().padStart(2, '0')}:${now.getMinutes().toString().padStart(2, '0')}`;
-      
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
-      
+      const WeeklySessionService = require('./weekly-session-service');
       const WeeklySessionClass = require('../models/WeeklySessionClass');
+
+      // 1. Get current IST representation
+      const currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+      const istComp = WeeklySessionService.getISTComponents(now);
+
+      // --- REDIS CACHE CHECK ---
+      const cacheKey = `user:${studentIdStr}:active-class`;
+      const cachedData = await CacheService.get(cacheKey);
+      if (cachedData !== undefined && cachedData !== null) {
+          // Note: Cache might store 'null' if no active class, so we check for undefined
+          return cachedData;
+      }
       
       // 1. Try WeeklySessionClass
       let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
-        date: today,
-        status: 'active', // For weekly class, we might rely on isMarkingOpen=true status? Or string status?
-        // In WeeklySessionClass schema: status enum is ['scheduled', 'cancelled', 'rescheduled', 'completed']
-        // It does NOT have 'active'. It uses `isMarkingOpen` to denote active marking.
-        // So query: isMarkingOpen: true
+        dateString: istComp.dateString,
         isMarkingOpen: true,
         startTime: { $lte: currentTime },
         endTime: { $gte: currentTime }
@@ -472,7 +481,10 @@ class AttendanceService {
 
       console.log('Active Class found:', sessions.length);
       
-      if (sessions.length === 0) return null;
+      if (sessions.length === 0) {
+          await CacheService.set(cacheKey, null, 60);
+          return null;
+      }
       
       const session = sessions[0];
       
@@ -488,12 +500,17 @@ class AttendanceService {
              else canMark = new Date() <= new Date(session.lateMarkingDeadline);
       }
 
-      return {
+      const result = {
         ...session.toObject(),
         attendanceMarked: !!attendance,
         attendanceStatus: attendance?.status || null,
         canMark: canMark
       };
+
+      // --- SAVE TO CACHE (TTL: 1 minute for active class as it changes quickly) ---
+      await CacheService.set(cacheKey, result, 60);
+
+      return result;
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(error.message, StatusCodes.INTERNAL_SERVER_ERROR);
@@ -520,66 +537,48 @@ class AttendanceService {
         throw new AppError('Student not found', StatusCodes.NOT_FOUND);
       }
       
-      // --- Timezone Aware Date Calculation (IST) ---
+      // --- Reliable IST Timezone Logic ---
       const now = new Date();
-      // Calculate IST time (UTC + 5.5 hours)
-      const istTime = new Date(now.getTime() + (5.5 * 60 * 60 * 1000));
-      const hours = istTime.getUTCHours().toString().padStart(2, '0');
-      const minutes = istTime.getUTCMinutes().toString().padStart(2, '0');
-      const actualTime = `${hours}:${minutes}`;
+      const WeeklySessionService = require('./weekly-session-service');
+      const WeeklySessionClass = require('../models/WeeklySessionClass');
 
-      // Calculate Academic "Today"
-      const today = new Date(istTime);
-      today.setUTCHours(0, 0, 0, 0);
+      // 1. Get current IST time (HH:mm)
+      const currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
       
-      let searchTime = actualTime;
+      // 2. Determine target day (Shift search window to tomorrow after 9:00 PM)
+      let targetDate = now;
+      let searchTimeBaseline = currentTime;
 
-      // After 9:00 PM IST, treat tomorrow as the "active" day
-      if (actualTime >= "21:00") {
-          today.setUTCDate(today.getUTCDate() + 1);
-          searchTime = "00:00"; 
+      if (currentTime >= "21:00") {
+          targetDate = new Date(now.getTime() + 24 * 60 * 60 * 1000);
+          searchTimeBaseline = "00:00"; 
+          console.log("🌙 Late night (IST): Next class lookup shifting to tomorrow");
       }
 
-      const tomorrow = new Date(today);
-      tomorrow.setUTCDate(today.getUTCDate() + 1);
-      
-      const WeeklySessionClass = require('../models/WeeklySessionClass');
-      const WeeklySessionService = require('./weekly-session-service');
+      // 3. Get IST components for targeted day
+      const istComp = WeeklySessionService.getISTComponents(targetDate);
 
-      // Get IST components for our targeted search day
-      const istComp = WeeklySessionService.getISTComponents(today);
+      // --- REDIS CACHE CHECK ---
+      const cacheKey = `user:${studentIdStr}:next-class:${istComp.dateString}:${searchTimeBaseline}`;
+      const cachedData = await CacheService.get(cacheKey);
+      if (cachedData !== undefined) return cachedData;
 
-      // 1. WeeklySessionClass query - Find the first upcoming class on the active day
-      let sessions = await WeeklySessionClass.find({
+      // Find the first upcoming class on the active day
+      // (Before 9 PM it's the next class today; After 9 PM it's the first class tomorrow)
+      const session = await WeeklySessionClass.findOne({
         batch: student.batch,
         section: student.section,
         dateString: istComp.dateString,
         status: { $in: ['scheduled', 'rescheduled'] }, 
-        startTime: { $gt: searchTime }
+        startTime: { $gt: searchTimeBaseline }
       })
       .populate('subject', 'name code facultyName')
-      .sort({ startTime: 1 })
-      .limit(1);
+      .sort({ startTime: 1 });
+
+      // --- SAVE TO CACHE (TTL: 5 minutes) ---
+      await CacheService.set(cacheKey, session, 300);
       
-      // If none found for the rest of today, look for the literal next day
-      if (sessions.length === 0) {
-          const nextDay = new Date(today.getTime() + 24 * 60 * 60 * 1000);
-          const nextIstComp = WeeklySessionService.getISTComponents(nextDay);
-          
-          sessions = await WeeklySessionClass.find({
-            batch: student.batch,
-            section: student.section,
-            dateString: nextIstComp.dateString,
-            status: { $in: ['scheduled', 'rescheduled'] }
-          })
-          .populate('subject', 'name code facultyName')
-          .sort({ startTime: 1 })
-          .limit(1);
-      }
-      
-      
-      
-      return sessions.length > 0 ? sessions[0] : null;
+      return session;
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(error.message, StatusCodes.INTERNAL_SERVER_ERROR);
@@ -640,6 +639,11 @@ class AttendanceService {
       
       const query = { student: studentIdStr };
       
+      // --- 1. REDIS CACHE CHECK ---
+      const cacheKey = `user:${studentIdStr}:overall-stats:${timeRange}`;
+      const cachedStats = await CacheService.get(cacheKey);
+      if (cachedStats) return cachedStats;
+
       // Apply time range filter
       if (timeRange !== 'all') {
         const now = new Date();
@@ -683,11 +687,16 @@ class AttendanceService {
         ? ((overallStats.present / overallStats.total) * 100).toFixed(2)
         : 100;
       
-      return {
+      const result = {
         overall: overallStats,
         subjectWise,
         timeRange
       };
+
+      // --- 2. SAVE TO CACHE (TTL: 10 minutes) ---
+      await CacheService.set(cacheKey, result, 600);
+      
+      return result;
     } catch (error) {
       if (error instanceof AppError) throw error;
       throw new AppError(error.message, StatusCodes.INTERNAL_SERVER_ERROR);
@@ -835,6 +844,15 @@ class AttendanceService {
         newStatus,
         reason
       });
+
+      // 🚀 Invalidate Cache for this student
+      const id = attendance.student._id.toString();
+      await Promise.all([
+          CacheService.delByPattern(`user:${id}:dashboard:*`),
+          CacheService.delByPattern(`user:${id}:next-class:*`),
+          CacheService.del(`user:${id}:active-class`),
+          CacheService.del(`user:${id}:full-dashboard`)
+      ]);
       
       return attendance;
     } catch (error) {

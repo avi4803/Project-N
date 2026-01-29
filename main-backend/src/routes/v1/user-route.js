@@ -50,4 +50,25 @@ router.patch('/reminder-settings',
     AuthRequestMiddlewares.checkAuth,
     UserController.updateReminderSettings);
 
+// Password Reset flow
+router.post('/forgot-password',
+    AuthRequestMiddlewares.rateLimit(3, 15 * 60 * 1000, 'password-reset-request'),
+    AuthRequestMiddlewares.validateForgotPasswordRequest,
+    UserController.forgotPassword);
+
+router.post('/resend-reset-otp',
+    AuthRequestMiddlewares.rateLimit(3, 15 * 60 * 1000, 'password-reset-resend'),
+    AuthRequestMiddlewares.validateForgotPasswordRequest, // Reuses email validation
+    UserController.forgotPassword); // Reuses the same logic to send new OTP
+
+router.post('/verify-reset-otp',
+    AuthRequestMiddlewares.rateLimit(10, 15 * 60 * 1000, 'password-reset-verify'),
+    AuthRequestMiddlewares.validateVerifyResetOtpRequest,
+    UserController.verifyResetOtp);
+
+router.post('/reset-password',
+    AuthRequestMiddlewares.validateResetToken,
+    AuthRequestMiddlewares.validateResetPasswordRequest,
+    UserController.resetPassword);
+
 module.exports = router ;

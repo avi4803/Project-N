@@ -9,7 +9,7 @@ const redis = new Redis({
 });
 
 redis.on('connect', () => {
-    console.log('✅ Rate Limiter Redis connected');
+    console.log(`✅ Cache Redis connected to ${REDIS_HOST}:${REDIS_PORT}`);
 });
 
 redis.on('error', (err) => {

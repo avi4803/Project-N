@@ -141,16 +141,20 @@ function authenticate(allowedRoles = []) {
       next();
 
     } catch (error) {
-      // Handle errors
-      if (error instanceof AppError) {
-          ErrorResponse.message = error.message;
-          ErrorResponse.error = error;
-          return res.status(error.statusCode).json(ErrorResponse);
-      }
+      console.error('❌ Generic Auth Middleware Error:', error.message);
       
-      ErrorResponse.message = 'Authentication failed';
-      ErrorResponse.error = error;
-      return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+      const statusCode = error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR;
+      const message = error.explanation || error.message || 'Authentication failed';
+
+      return res.status(statusCode).json({
+          success: false,
+          message: message,
+          error: {
+              statusCode: statusCode,
+              explanation: message
+          },
+          data: {}
+      });
     }
   };
 }
@@ -352,29 +356,19 @@ async function checkAuth(req, res, next) {
             next();
         }   
     } catch (error) {
+        console.error('❌ Authentication Middleware Error:', error.message);
+        
+        const statusCode = error.statusCode || StatusCodes.UNAUTHORIZED;
+        const message = error.explanation || error.message || 'Authentication failed';
 
-        console.log('Issue in checkAuth in middleware');
-        
-        // Handle specific error cases
-        if (error instanceof AppError) {
-            return res.status(error.statusCode).json({
-                success: false,
-                message: error.explanation,
-                error: {
-                    statusCode: error.statusCode,
-                    explanation: error.explanation
-                }
-            });
-        }
-        
-        // Generic error response
-        return res.status(StatusCodes.UNAUTHORIZED).json({
+        return res.status(statusCode).json({
             success: false,
-            message: 'Authentication failed',
+            message: message,
             error: {
-                statusCode: StatusCodes.UNAUTHORIZED,
-                explanation: error.message || 'Authentication failed'
-            }
+                statusCode: statusCode,
+                explanation: message
+            },
+            data: {}
         });
     }
 }
@@ -535,6 +529,61 @@ function rateLimit(maxRequests = 100, windowMs = 15 * 60 * 1000, routeName = 'gl
   };
 }
 
+function validateForgotPasswordRequest(req, res, next) {
+    if (!req.body.email) {
+        ErrorResponse.message = 'Email is required';
+        ErrorResponse.error = new AppError('Email not found in the incoming request', StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
+
+function validateVerifyResetOtpRequest(req, res, next) {
+    if (!req.body.email || !req.body.otp) {
+        ErrorResponse.message = 'Email and OTP are required';
+        ErrorResponse.error = new AppError('Email or OTP not found in the incoming request', StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
+
+function validateResetPasswordRequest(req, res, next) {
+    if (!req.body.password) {
+        ErrorResponse.message = 'New password is required';
+        ErrorResponse.error = new AppError('Password not found in the incoming request', StatusCodes.BAD_REQUEST);
+        return res.status(StatusCodes.BAD_REQUEST).json(ErrorResponse);
+    }
+    next();
+}
+
+async function validateResetToken(req, res, next) {
+    try {
+        const token = req.headers['x-reset-token'];
+        if (!token) {
+            throw new AppError('Reset token is required in x-reset-token header', StatusCodes.UNAUTHORIZED);
+        }
+
+        const decoded = jwt.verify(token, JWT_SECRET);
+        
+        if (decoded.purpose !== 'password_reset') {
+            throw new AppError('Invalid token purpose', StatusCodes.UNAUTHORIZED);
+        }
+
+        req.userId = decoded.id;
+        next();
+    } catch (error) {
+        console.error('❌ Reset Token Validation Error:', error.message);
+        const statusCode = error.statusCode || StatusCodes.UNAUTHORIZED;
+        const message = error.name === 'TokenExpiredError' ? 'Reset token expired. Please verify OTP again.' : 'Invalid reset token';
+        
+        return res.status(statusCode).json({
+            success: false,
+            message: message,
+            error: { statusCode, explanation: message }
+        });
+    }
+}
+
 module.exports = {
     authenticate,
     verifySameCollege,
@@ -549,6 +598,9 @@ module.exports = {
     checkAuth,
     validateAddRoleRequest,
     validateSignupInitRequest,
-    validateSignupVerifyRequest
-    
+    validateSignupVerifyRequest,
+    validateForgotPasswordRequest,
+    validateVerifyResetOtpRequest,
+    validateResetPasswordRequest,
+    validateResetToken
 }
