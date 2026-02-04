@@ -178,8 +178,6 @@ class WeeklySessionService {
                 continue;
             }
 
-            const istComp = this.getISTComponents(classDate);
-
             const newClass = await WeeklySessionClass.create({
                 weeklySession: session._id,
                 templateId: cls._id,
@@ -302,74 +300,58 @@ class WeeklySessionService {
     const [currentYear, currentWeek] = this.getWeekNumber(oldDate);
     const [targetYear, targetWeek] = this.getWeekNumber(targetDate);
 
-    if (currentYear === targetYear && currentWeek === targetWeek) {
-        // Same week: Simple update
-        cls.date = targetDate;
-        cls.startTime = newStartTime;
-        cls.endTime = newEndTime;
-        if(room) cls.room = room;
-        cls.status = 'scheduled'; // Reset status to active
-        await cls.save();
-        
-        // Update reminders
-        await this.cancelReminders(classId);
-        await this.scheduleReminders(cls); // Re-schedule with new time
-    } else {
-        // Different week: Move class
-        console.log(`Class moving from Week ${currentWeek} to Week ${targetWeek}. Handling cross-week reschedule.`);
+    // 1. Mark current class as 'rescheduled'
+    const istCompNew = this.getISTComponents(targetDate);
+    const oldStatus = cls.status;
+    cls.status = 'rescheduled';
+    cls.cancellationReason = `Rescheduled to ${targetDate.toDateString()} at ${newStartTime}`;
+    await cls.save();
 
-        // 1. Mark current class as 'rescheduled' (cancelled in this week)
-        cls.status = 'rescheduled';
-        cls.cancellationReason = `Rescheduled to ${targetDate.toDateString()}`;
-        await cls.save();
+    // 2. Ensure target week session exists (for cross-week or first class of week)
+    let targetSession = await WeeklySession.findOne({
+        batch: cls.batch._id,
+        section: cls.section._id,
+        year: targetYear,
+        weekNumber: targetWeek
+    });
 
-        // 2. Ensure target week session exists
-        let targetSession = await WeeklySession.findOne({
+    if (!targetSession) {
+        console.log(`Target week session not found. Auto-generating for Week ${targetWeek}...`);
+        await this.generateForWeek(targetDate);
+        targetSession = await WeeklySession.findOne({
             batch: cls.batch._id,
             section: cls.section._id,
             year: targetYear,
             weekNumber: targetWeek
         });
-
-        if (!targetSession) {
-            console.log(`Target week session not found. Auto-generating for Week ${targetWeek}...`);
-            await this.generateForWeek(targetDate);
-            // Re-fetch
-            targetSession = await WeeklySession.findOne({
-                batch: cls.batch._id,
-                section: cls.section._id,
-                year: targetYear,
-                weekNumber: targetWeek
-            });
-        }
-
-        // 3. Create NEW class in target week
-        // We replicate the original class details but with new date/time
-        // Check if subject exists in target week? It should.
-        
-        const istComp = this.getISTComponents(targetDate);
-        
-        await WeeklySessionClass.create({
-            weeklySession: targetSession._id,
-            templateId: cls.templateId, // Link to same template if applicable
-            title: cls.title,
-            subject: cls.subject._id,
-            batch: cls.batch._id,
-            section: cls.section._id,
-            college: cls.college, // Keep same college
-            date: targetDate,
-            dayNum: istComp.day,
-            monthNum: istComp.month,
-            yearNum: istComp.year,
-            day: targetDate.toLocaleDateString('en-US', { weekday: 'long' }),
-            startTime: newStartTime,
-            endTime: newEndTime,
-            room: room || cls.room,
-            type: cls.type,
-            status: 'scheduled',
-            isExtraClass: true, // It's technically an extra/moved class in that week context
-        });
     }
+
+    // 3. Create NEW class record
+    const newClass = await WeeklySessionClass.create({
+        weeklySession: targetSession._id,
+        templateId: cls.templateId, 
+        title: cls.title,
+        subject: cls.subject._id,
+        batch: cls.batch._id,
+        section: cls.section._id,
+        college: cls.college,
+        date: targetDate,
+        dayNum: istCompNew.day,
+        monthNum: istCompNew.month,
+        yearNum: istCompNew.year,
+        dateString: istCompNew.dateString,
+        day: targetDate.toLocaleDateString('en-US', { weekday: 'long' }),
+        startTime: newStartTime,
+        endTime: newEndTime,
+        room: room || cls.room,
+        type: cls.type,
+        status: 'scheduled',
+        isExtraClass: true
+    });
+
+    // 4. Update reminders
+    await this.cancelReminders(classId);
+    await this.scheduleReminders(newClass);
 
     // Determine reschedule type (Postponed vs Preponed)
     // Construct simplified Date objects for comparison
@@ -540,8 +522,10 @@ class WeeklySessionService {
     if (!cls) throw new AppError('Class not found', StatusCodes.NOT_FOUND);
 
     // Safety Check: Don't delete if attendance data exists
-    if (cls.isMarkingOpen || cls.presentCount > 0 || cls.absentCount > 0) {
-        throw new AppError('Cannot delete class that has attendance data or is currently active. Please cancel it instead.', StatusCodes.BAD_REQUEST);
+    const Attendance = require('../models/Attendance');
+    const hasAttendance = await Attendance.exists({ session: classId });
+    if (hasAttendance) {
+        throw new AppError('Cannot delete class that has attendance records. Please cancel it instead.', StatusCodes.BAD_REQUEST);
     }
 
     // Prevent past class deletion (Timezone-Agnostic Numeric Validation)

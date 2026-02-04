@@ -15,14 +15,9 @@ const attendanceSchema = new mongoose.Schema({
   },
   session: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: 'AttendanceSession',
+    ref: 'WeeklySessionClass',
     required: true,
     index: true
-  },
-  college: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'College',
-    required: true
   },
   batch: {
     type: mongoose.Schema.Types.ObjectId,
@@ -34,7 +29,6 @@ const attendanceSchema = new mongoose.Schema({
     ref: 'Section',
     required: true
   },
-  // Attendance details
   date: {
     type: Date,
     required: true,
@@ -44,68 +38,12 @@ const attendanceSchema = new mongoose.Schema({
     type: String,
     enum: ['present', 'absent'],
     required: true,
-    default: 'absent'
-  },
-  // Streak tracking
-  isStreakDay: {
-    type: Boolean,
-    default: false
-  },
-  // Marking details
-  markedBy: {
-    type: mongoose.Schema.Types.ObjectId,
-    ref: 'User' // Can be student (self-marking) or faculty
-  },
-  markedByRole: {
-    type: String,
-    enum: ['student', 'admin', 'system'],
-    default: 'student'
+    default: 'present'
   },
   markedAt: {
     type: Date,
     default: Date.now
-  },
-  // Verification (if required)
-  verification: {
-    method: {
-      type: String,
-      enum: ['manual', 'geolocation', 'qr_code', 'biometric', 'face_recognition'],
-      default: 'manual'
-    },
-    geolocation: {
-      latitude: Number,
-      longitude: Number,
-      accuracy: Number
-    },
-    ipAddress: String,
-    deviceInfo: String
-  },
-  // Additional info
-  remarks: {
-    type: String
-  },
-  proofDocument: {
-    url: String,
-    type: String // For excused absences
-  },
-  // Modification tracking
-  isModified: {
-    type: Boolean,
-    default: false
-  },
-  modificationHistory: [{
-    modifiedBy: {
-      type: mongoose.Schema.Types.ObjectId,
-      ref: 'User'
-    },
-    previousStatus: String,
-    newStatus: String,
-    reason: String,
-    modifiedAt: {
-      type: Date,
-      default: Date.now
-    }
-  }]
+  }
 }, {
   timestamps: true
 });
@@ -118,29 +56,6 @@ attendanceSchema.index(
 
 // Indexes for common queries
 attendanceSchema.index({ student: 1, subject: 1, date: -1 });
-attendanceSchema.index({ subject: 1, date: -1, status: 1 });
-attendanceSchema.index({ batch: 1, section: 1, date: -1 });
-
-// Virtual for on-time marking
-attendanceSchema.virtual('isOnTime').get(function() {
-  return !this.isLateMarking;
-});
-
-// Static methods
-attendanceSchema.statics.calculateAttendancePercentage = async function(studentId, subjectId) {
-  const total = await this.countDocuments({
-    student: studentId,
-    subject: subjectId
-  });
-
-  const present = await this.countDocuments({
-    student: studentId,
-    subject: subjectId,
-    status: 'present'
-  });
-
-  return total > 0 ? (present / total) * 100 : 100;
-};
 
 attendanceSchema.statics.getAttendanceStats = async function(studentId, subjectId) {
   const stats = await this.aggregate([

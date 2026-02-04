@@ -84,22 +84,6 @@ const SubjectSchema = new mongoose.Schema({
     warningThreshold: {
       type: Number,
       default: 80 // Warn students below this threshold
-    },
-    allowLateMarking: {
-      type: Boolean,
-      default: true
-    },
-    lateMarkingWindowMinutes: {
-      type: Number,
-      default: 30 // Minutes after class ends
-    },
-    allowEarlyMarking: {
-      type: Boolean,
-      default: true
-    },
-    earlyMarkingWindowMinutes: {
-      type: Number,
-      default: 10 // Minutes before class starts
     }
   }
 }, {

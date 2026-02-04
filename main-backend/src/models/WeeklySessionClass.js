@@ -50,17 +50,6 @@ const weeklySessionClassSchema = new mongoose.Schema({
   },
   cancellationReason: String,
   
-  // Attendance Tracking (Merged from AttendanceSession)
-  isMarkingOpen: { type: Boolean, default: false },
-  markingOpenedAt: Date,
-  markingClosedAt: Date,
-  lateMarkingDeadline: Date,
-  allowLateMarking: { type: Boolean, default: true },
-  
-  // Stats
-  presentCount: { type: Number, default: 0 },
-  absentCount: { type: Number, default: 0 },
-
   // Numeric Date Components (Timezone Agnostic)
   dayNum: Number,   // 1-31
   monthNum: Number, // 1-12
@@ -87,34 +76,5 @@ weeklySessionClassSchema.index(
   { batch: 1, section: 1, date: 1, startTime: 1 }, 
   { unique: true, name: 'unique_class_slot' }
 );
-
-// --- State Machine Safeguards ---
-
-// Store original status on load to validate transitions
-weeklySessionClassSchema.post('init', function() {
-  this._originalStatus = this.status;
-});
-
-weeklySessionClassSchema.pre('save', function(next) {
-  if (this.isModified('status') && this._originalStatus) {
-    const from = this._originalStatus;
-    const to = this.status;
-    
-    if (from === to) return next();
-
-    const invalidTransitions = {
-      // From : [Blocked To]
-      'cancelled': ['completed'], 
-      'rescheduled': ['scheduled', 'cancelled', 'completed'], // Rescheduled is usually terminal for that specific slot
-      'completed': ['scheduled', 'cancelled', 'rescheduled']
-    };
-
-    if (invalidTransitions[from] && invalidTransitions[from].includes(to)) {
-      const err = new Error(`Invalid status transition from '${from}' to '${to}'`);
-      return next(err);
-    }
-  }
-  next();
-});
 
 module.exports = mongoose.model('WeeklySessionClass', weeklySessionClassSchema);

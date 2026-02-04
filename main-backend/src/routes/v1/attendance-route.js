@@ -1,10 +1,8 @@
 const express = require('express');
-const {AttendanceController} = require('../../controllers/');
+const { AttendanceController } = require('../../controllers/');
 const { AuthRequestMiddlewares } = require('../../middlewares/index');
 
 const router = express.Router();
-
-// ==================== STUDENT ROUTES ====================
 
 /**
  * @route   GET /api/v1/attendance/today
@@ -19,7 +17,7 @@ router.get(
 
 /**
  * @route   GET /api/v1/attendance/active
- * @desc    Get currently active class (happening now)
+ * @desc    Get currently active class (based on time)
  * @access  Private (Student)
  */
 router.get(
@@ -29,21 +27,10 @@ router.get(
 );
 
 /**
- * @route   GET /api/v1/attendance/next
- * @desc    Get next upcoming class
- * @access  Private (Student)
- */
-router.get(
-  '/next',
-  AuthRequestMiddlewares.checkAuth,
-  AttendanceController.getNextClass
-);
-
-/**
  * @route   POST /api/v1/attendance/mark/:sessionId
- * @desc    Mark self-attendance for active session
+ * @desc    Mark/Toggle attendance for a specific session
  * @access  Private (Student)
- * @body    { method: 'manual'|'geolocation', geolocation: { latitude, longitude } }
+ * @body    { status: 'present'|'absent' }
  */
 router.post(
   '/mark/:sessionId',
@@ -52,10 +39,20 @@ router.post(
 );
 
 /**
+ * @route   GET /api/v1/attendance/history
+ * @desc    Get overall attendance history for logged-in student
+ * @access  Private (Student)
+ */
+router.get(
+  '/history',
+  AuthRequestMiddlewares.checkAuth,
+  AttendanceController.getAttendanceHistory
+);
+
+/**
  * @route   GET /api/v1/attendance/history/:subjectId
  * @desc    Get attendance history for a subject
  * @access  Private (Student)
- * @query   ?startDate=2024-01-01&endDate=2024-12-31&limit=50&skip=0
  */
 router.get(
   '/history/:subjectId',
@@ -73,69 +70,6 @@ router.get(
   '/stats',
   AuthRequestMiddlewares.checkAuth,
   AttendanceController.getOverallStats
-);
-
-/**
- * @route   GET /api/v1/attendance/streak
- * @desc    Get attendance streak (overall or for specific subject)
- * @access  Private (Student)
- * @query   ?subjectId=<id>
- */
-router.get(
-  '/streak',
-  AuthRequestMiddlewares.checkAuth,
-  AttendanceController.getStreak
-);
-
-// ==================== ADMIN/FACULTY ROUTES ====================
-
-/**
- * @route   PUT /api/v1/attendance/:attendanceId/update
- * @desc    Update attendance record (Admin/Faculty only)
- * @access  Private (Admin/Faculty)
- * @body    { status: 'present'|'absent', reason: string }
- */
-router.put(
-  '/:attendanceId/update',
-  AuthRequestMiddlewares.checkAuth,
-  AuthRequestMiddlewares.isAdminOrLocalAdmin,
-  AttendanceController.updateAttendance
-);
-
-/**
- * @route   POST /api/v1/attendance/admin/create-sessions
- * @desc    Manually create today's sessions (for testing/recovery)
- * @access  Private (Admin)
- */
-router.post(
-  '/admin/create-sessions',
-  AuthRequestMiddlewares.checkAuth,
-  AuthRequestMiddlewares.isAdminOrLocalAdmin,
-  AttendanceController.createTodaysSessions
-);
-
-/**
- * @route   POST /api/v1/attendance/admin/activate-sessions
- * @desc    Manually activate sessions (for testing)
- * @access  Private (Admin)
- */
-router.post(
-  '/admin/activate-sessions',
-  AuthRequestMiddlewares.checkAuth,
-  AuthRequestMiddlewares.isAdminOrLocalAdmin,
-  AttendanceController.activateSessions
-);
-
-/**
- * @route   POST /api/v1/attendance/admin/close-sessions
- * @desc    Manually close sessions (for testing)
- * @access  Private (Admin)
- */
-router.post(
-  '/admin/close-sessions',
-  AuthRequestMiddlewares.checkAuth,
-  AuthRequestMiddlewares.isAdminOrLocalAdmin,
-  AttendanceController.closeSessions
 );
 
 module.exports = router;

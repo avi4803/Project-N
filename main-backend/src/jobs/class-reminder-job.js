@@ -1,7 +1,8 @@
 const cron = require('node-cron');
-const AttendanceSession = require('../models/AttendanceSession');
+const WeeklySessionClass = require('../models/WeeklySessionClass');
 const User = require('../models/User');
 const { publishNotification } = require('../services/notification-publisher');
+const WeeklySessionService = require('../services/weekly-session-service');
 
 /**
  * Check for upcoming classes starting in ~15 minutes
@@ -15,15 +16,14 @@ const scheduleClassReminders = () => {
       const now = new Date();
       const fifteenMinutesLater = new Date(now.getTime() + 15 * 60000);
       
-      // Format time as HH:MM string
-      const targetTime = `${fifteenMinutesLater.getHours().toString().padStart(2, '0')}:${fifteenMinutesLater.getMinutes().toString().padStart(2, '0')}`;
+      // Format time as HH:MM string in IST
+      const targetTime = fifteenMinutesLater.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
       
-      const today = new Date();
-      today.setHours(0, 0, 0, 0);
+      const istComp = WeeklySessionService.getISTComponents(fifteenMinutesLater);
       
       // Find sessions starting at targetTime
-      const upcomingSessions = await AttendanceSession.find({
-        date: today,
+      const upcomingSessions = await WeeklySessionClass.find({
+        dateString: istComp.dateString,
         status: 'scheduled',
         startTime: targetTime
       }).populate('subject batch section');
