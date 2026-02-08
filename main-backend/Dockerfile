@@ -3,7 +3,8 @@ FROM node:18-alpine AS builder
 WORKDIR /app
 COPY package*.json ./
 # Install production dependencies only (for smaller image)
-RUN npm ci --omit=dev
+# Using 'npm install' instead of 'npm ci' to ensure nodemailer is installed if lockfile is out of sync
+RUN npm install --omit=dev
 
 # Runtime Stage
 FROM node:18-alpine
