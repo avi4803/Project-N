@@ -1,0 +1,45 @@
+name: Deploy to AWS
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Deploy via SSH
+        uses: appleboy/ssh-action@master
+        with:
+          host: ${{ secrets.SSH_HOST }}
+          username: ${{ secrets.SSH_USER }}
+          key: ${{ secrets.SSH_PRIVATE_KEY }}
+          script: |
+            cd /home/ec2-user/Project-N/main-backend
+            
+            # 1. Pull latest changes
+            git pull origin main
+            
+            # 2. Ensure .env exists (Optional: You might want to copy from a secure location or use secrets to write it)
+            # Assuming .env is already manually placed on the server for security (Recommended)
+            
+            # 3. Stop old containers (to free up RAM before building)
+            docker compose down || true
+            
+            # 4. Prune unused images to save disk space (Critical for Free Tier)
+            docker system prune -f
+            
+            # 5. Build and Start
+            docker compose up -d --build
+            
+            # 6. Verify it's running
+            docker compose ps
+         
+           
+        
+         
