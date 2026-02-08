@@ -1,0 +1,52 @@
+version: '3.8'
+
+services:
+  # Redis Service
+  redis:
+    image: redis:alpine
+    container_name: redis
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis_data:/data
+    environment:
+      - TZ=Asia/Kolkata
+    # Memory limits (crucial for your 1GB server)
+    command: redis-server --save 60 1 --loglevel warning --maxmemory 150mb --maxmemory-policy allkeys-lru
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 5s
+      timeout: 10s
+      retries: 5
+    restart: always
+
+  # Main Backend Service (Now includes Notification Logic)
+  main-backend:
+    build: .
+    container_name: main-backend
+    ports:
+      - "3000:3000"
+    environment:
+      - PORT=3000
+      - REDIS_HOST=redis
+      - REDIS_PORT=6379
+      - TZ=Asia/Kolkata
+      - NODE_ENV=production
+    env_file:
+      - .env
+    depends_on:
+      redis:
+        condition: service_healthy
+    restart: on-failure:5
+    deploy:
+      resources:
+        limits:
+          memory: 450M
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  redis_data:

@@ -25,7 +25,8 @@ app.listen(ServerConfig.PORT, async() => {
     await connectDB();
     console.log('📦 MongoDB connected successfully');
     require('./workers/reminder-worker');
+    require('./workers/notification-worker');
     require('./jobs/daily-summary-job');
-    console.log('🔄 Reminder Queue & cron jobs running');
+    console.log('🔄 Notification Worker, Reminder Queue & cron jobs running');
     
 });

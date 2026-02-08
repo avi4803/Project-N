@@ -71,7 +71,7 @@ async function completeProfile(req, res) {
         // Get verified data
         const pendingUser = await OtpService.getCompletedSignupData(decoded.email);
         console.log(req.body)
-;
+;      
         const user = await UserService.createUser({
             collegeId: req.body.collegeId,
             email: pendingUser.email, // Use email from trusted PendingUser

@@ -177,6 +177,7 @@ class WeeklySessionService {
                 console.warn(`⚠️ Subject '${cls.subject}' not found for batch ${timetable.batch._id}. Skipping class.`);
                 continue;
             }
+            const istComp = this.getISTComponents(classDate);
 
             const newClass = await WeeklySessionClass.create({
                 weeklySession: session._id,

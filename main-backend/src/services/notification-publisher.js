@@ -1,4 +1,4 @@
-const notificationQueue = require('../config/notification-queue');
+const notificationQueue = require('../queues/notification-queue');
 
 /**
  * Publish a notification event to the queue

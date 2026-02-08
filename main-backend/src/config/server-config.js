@@ -2,6 +2,8 @@ const dotenv = require('dotenv');
 
 dotenv.config();
 
+console.log(`[DEBUG] REDIS_HOST=${process.env.REDIS_HOST}`);
+
 module.exports = {
     PORT: process.env.PORT,
     MONGO_URI: process.env.MONGO_URI,

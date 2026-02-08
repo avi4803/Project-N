@@ -356,7 +356,8 @@ async function resetUserPassword(userId, newPassword) {
 }
 
 module.exports = {
-  userSignUp: createUser, // Renamed createUser to userSignUp as per instruction
+  userSignUp: createUser ,
+  createUser, // Renamed createUser to userSignUp as per instruction
   userSignIn,
   isAuthenticated,
   addRoleToUser,

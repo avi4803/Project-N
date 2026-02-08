@@ -1,12 +1,8 @@
 const Queue = require('bull');
-const { REDIS_HOST, REDIS_PORT, REDIS_PASSWORD } = require('./server-config');
+const { redisConfig } = require('./redis-config');
 
 const reminderQueue = new Queue('reminder-queue', {
-  redis: {
-    host: REDIS_HOST,
-    port: REDIS_PORT,
-    password: REDIS_PASSWORD,
-  },
+  redis: redisConfig,
   defaultJobOptions: {
     removeOnComplete: true, // Keep Redis clean
     removeOnFail: false
