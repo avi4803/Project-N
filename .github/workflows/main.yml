@@ -5,14 +5,33 @@ on:
     branches:
       - main
 
-jobs:
-  deploy:
-    runs-on: ubuntu-latest
+name: Deploy to AWS
 
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  # 1. TEST / BUILD CHECK JOB
+  # This runs on GitHub's servers first. If it fails, deploy never happens.
+  build-test:
+    runs-on: ubuntu-latest
     steps:
       - name: Checkout code
         uses: actions/checkout@v4
 
+      - name: Validation Build (Docker)
+        run: |
+          cd main-backend
+          docker build . --file Dockerfile --tag test-build
+
+  # 2. DEPLOY JOB
+  # Only runs if build-test succeeds
+  deploy:
+    needs: build-test
+    runs-on: ubuntu-latest
+    steps:
       - name: Deploy via SSH
         uses: appleboy/ssh-action@master
         with:
@@ -25,19 +44,16 @@ jobs:
             # 1. Pull latest changes
             git pull origin main
             
-            # 2. Ensure .env exists (Optional: You might want to copy from a secure location or use secrets to write it)
-            # Assuming .env is already manually placed on the server for security (Recommended)
-            
-            # 3. Stop old containers (to free up RAM before building)
+            # 2. Stop old containers (to free up RAM before building)
             docker compose down || true
             
-            # 4. Prune unused images to save disk space (Critical for Free Tier)
+            # 3. Prune unused images to save disk space (Critical for Free Tier)
             docker system prune -f
             
-            # 5. Build and Start
+            # 4. Build and Start
             docker compose up -d --build
             
-            # 6. Verify it's running
+            # 5. Verify it's running
             docker compose ps
          
            
