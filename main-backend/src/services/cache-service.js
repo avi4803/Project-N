@@ -1,4 +1,4 @@
-const redis = require('../config/redis-config');
+const { redisClient: redis } = require('../config/redis-config');
 
 class CacheService {
     /**

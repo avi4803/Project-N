@@ -1,5 +1,5 @@
 const Queue = require('bull');
-const redisConfig = require('../config/redis-config');
+const { redisConfig } = require('../config/redis-config');
 const { sendOtpEmail, sendWelcomeEmail, sendPasswordResetOtpEmail } = require('../services/email-service');
 const { sendPushNotification } = require('../services/fcm-service');
 

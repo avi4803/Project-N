@@ -493,7 +493,7 @@ function verifySameCollege(req, res, next) {
  * @param {number} windowMs - Window size in milliseconds
  * @param {string} routeName - Identifier for the route (to have separate limits)
  */
-const redis = require('../config/redis-config');
+const { redisClient: redis } = require('../config/redis-config');
 
 function rateLimit(maxRequests = 100, windowMs = 15 * 60 * 1000, routeName = 'global') {
   return async (req, res, next) => {
