@@ -53,7 +53,7 @@ class CacheService {
         try {
             const keys = await redis.keys(pattern);
             if (keys.length > 0) {
-                await redis.del(keys);
+                await redis.del(...keys);
             }
         } catch (error) {
             console.error(`Cache DelPattern Error [${pattern}]:`, error);

@@ -48,6 +48,14 @@ const weeklySessionClassSchema = new mongoose.Schema({
     type: Boolean,
     default: false
   },
+  isMarkingOpen: {
+    type: Boolean,
+    default: false
+  },
+  isMarkingDone: {
+    type: Boolean,
+    default: false
+  },
   cancellationReason: String,
   
   // Numeric Date Components (Timezone Agnostic)
