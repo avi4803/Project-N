@@ -246,6 +246,7 @@ async function getTimetableById(id) {
 //   }
 // }
 
+// Update timetable
 async function updateTimetable(timetableId, updateData, adminId) {
   try {
     const timetable = await Timetable.findById(timetableId)
@@ -261,16 +262,40 @@ async function updateTimetable(timetableId, updateData, adminId) {
     timetable.lastUpdated = new Date();
     await timetable.save();
 
-    // ✅ Sync subjects with updated timetable
+    // 1. ✅ Sync subjects with updated timetable
     console.log('🔄 Syncing subjects with updated timetable...');
     const subjectResult = await SubjectService.syncSubjectsWithTimetable(timetableId);
     
+    // 2. 🔄 SYNC CURRENT WEEK SESSIONS
+    // Delete future scheduled sessions derived from old blueprint
+    const WeeklySessionClass = require('../models/WeeklySessionClass');
+    const WeeklySessionService = require('./weekly-session-service');
+    
+    // Check if we need to regenerate sessions (only if schedule changed)
+    if (updateData.schedule) {
+        console.log('🔄 Schedule changed. Regenerating future sessions for this week...');
+        
+        // Delete "scheduled" classes from today onwards that haven't started attendance
+        const deleteResult = await WeeklySessionClass.deleteMany({
+            batch: timetable.batch._id,
+            section: timetable.section._id,
+            date: { $gte: new Date().setHours(0,0,0,0) }, // Today onwards
+            status: 'scheduled',
+            isMarkingOpen: false 
+        });
+        
+        console.log(`🗑️ Deleted ${deleteResult.deletedCount} old sessions.`);
+
+        // Regenerate sessions for this week (idempotent)
+        await WeeklySessionService.generateForWeek(new Date());
+    }
+
     console.log(`✅ Subjects synced:
       - Created: ${subjectResult.created.length}
       - Updated: ${subjectResult.updated.length}
     `);
 
-    // Notify students
+    // 3. 📣 Notify students
     const User = require('../models/User');
     const students = await User.find({
       batch: timetable.batch._id,
@@ -279,12 +304,14 @@ async function updateTimetable(timetableId, updateData, adminId) {
     }).select('_id');
 
     if (students.length > 0) {
+      const NotificationPublisher = require('./notification-publisher'); // Require inside to avoid circular deps if any
       await NotificationPublisher.publishTimetableUpdated({
         studentIds: students.map(s => s._id.toString()),
         timetableId: timetable._id.toString(),
         batchName: timetable.batch.program,
         sectionName: timetable.section.name,
-        subjectsAffected: subjectResult.summary.totalSubjects
+        subjectsAffected: subjectResult.summary.totalSubjects,
+        message: `The timetable for ${timetable.batch.program} (${timetable.section.name}) has been updated. Future classes for this week have been synced.`
       });
     }
 
