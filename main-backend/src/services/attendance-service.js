@@ -102,6 +102,8 @@ class AttendanceService {
       const cachedData = await CacheService.get(cacheKey);
       if (cachedData) return cachedData;
       
+      console.log(`🔍 [DEBUG] querying todays classes for Student ${studentIdStr} | Batch: ${student.batch} | Section: ${student.section} | Date: ${istComp.dateString}`);
+
       let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
@@ -109,6 +111,8 @@ class AttendanceService {
       })
       .populate('subject', 'name code facultyName')
       .sort({ startTime: 1 });
+      
+      console.log(`🔍 [DEBUG] Found ${sessions.length} sessions.`);
 
       if (sessions.length === 0) {
         await WeeklySessionService.generateForWeek(now);

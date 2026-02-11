@@ -591,10 +591,20 @@ class WeeklySessionService {
    * Correctly handles timezone shifts regardless of server location
    */
   getISTComponents(date) {
-      const istStr = date.toLocaleString('en-US', { timeZone: 'Asia/Kolkata', year: 'numeric', month: 'numeric', day: 'numeric' });
-      const [m, d, y] = istStr.split('/').map(Number);
-      const dateString = `${y}-${String(m).padStart(2, '0')}-${String(d).padStart(2, '0')}`;
-      return { day: d, month: m, year: y, dateString };
+      const formatter = new Intl.DateTimeFormat('en-US', {
+          timeZone: 'Asia/Kolkata',
+          year: 'numeric',
+          month: 'numeric',
+          day: 'numeric'
+      });
+      
+      const parts = formatter.formatToParts(date);
+      const day = parseInt(parts.find(p => p.type === 'day').value);
+      const month = parseInt(parts.find(p => p.type === 'month').value);
+      const year = parseInt(parts.find(p => p.type === 'year').value);
+      
+      const dateString = `${year}-${String(month).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+      return { day, month, year, dateString };
   }
 
   /**
