@@ -266,28 +266,45 @@ async function updateTimetable(timetableId, updateData, adminId) {
     console.log('🔄 Syncing subjects with updated timetable...');
     const subjectResult = await SubjectService.syncSubjectsWithTimetable(timetableId);
     
-    // 2. 🔄 SYNC CURRENT WEEK SESSIONS
-    // Delete future scheduled sessions derived from old blueprint
+    // 2. 🔄 SYNC SESSIONS (Current & Future Weeks)
     const WeeklySessionClass = require('../models/WeeklySessionClass');
+    const WeeklySession = require('../models/WeeklySession'); // Import WeeklySession model
     const WeeklySessionService = require('./weekly-session-service');
     
     // Check if we need to regenerate sessions (only if schedule changed)
     if (updateData.schedule) {
-        console.log('🔄 Schedule changed. Regenerating future sessions for this week...');
+        console.log('🔄 Schedule changed. checking for active weeks...');
         
-        // Delete "scheduled" classes from today onwards that haven't started attendance
-        const deleteResult = await WeeklySessionClass.deleteMany({
+        // Find all WeeklySessions that cover today or future dates
+        const today = new Date();
+        today.setHours(0,0,0,0);
+
+        const activeSessions = await WeeklySession.find({
             batch: timetable.batch._id,
             section: timetable.section._id,
-            date: { $gte: new Date().setHours(0,0,0,0) }, // Today onwards
-            status: 'scheduled',
-            isMarkingOpen: false 
+            endDate: { $gte: today }
         });
-        
-        console.log(`🗑️ Deleted ${deleteResult.deletedCount} old sessions.`);
 
-        // Regenerate sessions for this week (idempotent)
-        await WeeklySessionService.generateForWeek(new Date());
+        console.log(`found ${activeSessions.length} active weeks to update.`);
+
+        for (const session of activeSessions) {
+            console.log(`🔄 Updating Week ${session.weekNumber} (${session.year})...`);
+
+             // Delete "scheduled" classes for this specific week from today onwards
+            const deleteResult = await WeeklySessionClass.deleteMany({
+                weeklySession: session._id, // Scope to this week
+                date: { $gte: today },     // Only future dates
+                status: 'scheduled',
+                isMarkingOpen: false,
+                isExtraClass: { $ne: true } // Protect EXTRA/RESCHEDULED classes
+            });
+            
+            console.log(`   - Deleted ${deleteResult.deletedCount} old sessions.`);
+
+            // Regenerate this specific week
+            // generateForWeek takes any date within that week. session.startDate is perfect.
+            await WeeklySessionService.generateForWeek(session.startDate);
+        }
     }
 
     console.log(`✅ Subjects synced:
