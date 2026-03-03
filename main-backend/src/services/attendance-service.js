@@ -105,7 +105,8 @@ class AttendanceService {
       let sessions = await WeeklySessionClass.find({
         batch: student.batch,
         section: student.section,
-        dateString: istComp.dateString
+        dateString: istComp.dateString,
+        status: { $ne: 'rescheduled' }
       })
       .populate('subject', 'name code facultyName')
       .sort({ startTime: 1 });
@@ -115,7 +116,8 @@ class AttendanceService {
         sessions = await WeeklySessionClass.find({
           batch: student.batch,
           section: student.section,
-          dateString: istComp.dateString
+          dateString: istComp.dateString,
+          status: { $ne: 'rescheduled' }
         })
         .populate('subject', 'name code facultyName')
         .sort({ startTime: 1 });
@@ -166,7 +168,8 @@ class AttendanceService {
         section: student.section,
         dateString: istComp.dateString,
         startTime: { $lte: currentTime },
-        endTime: { $gte: currentTime }
+        endTime: { $gte: currentTime },
+        status: { $ne: 'rescheduled' }
       })
       .populate('subject', 'name code facultyName');
       
@@ -197,9 +200,25 @@ class AttendanceService {
     try {
       if (!studentId) throw new AppError('Student ID is required', StatusCodes.BAD_REQUEST);
       const studentIdStr = studentId.toString();
+      const student = await User.findById(studentIdStr);
+      if (!student) throw new AppError('Student not found', StatusCodes.NOT_FOUND);
+
       const { startDate, endDate, limit = 50, skip = 0 } = options;
       
-      const query = { student: studentIdStr };
+      const now = new Date();
+      const istComp = WeeklySessionService.getISTComponents(now);
+      const currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
+      
+      let query = {
+        batch: student.batch,
+        section: student.section,
+        status: { $nin: ['rescheduled'] },
+        $or: [
+            { dateString: { $lt: istComp.dateString } }, 
+            { dateString: istComp.dateString, startTime: { $lte: currentTime } } 
+        ]
+      };
+
       if (subjectId) {
         query.subject = subjectId;
       }
@@ -210,12 +229,34 @@ class AttendanceService {
         if (endDate) query.date.$lte = new Date(endDate);
       }
       
-      const records = await Attendance.find(query)
-        .populate('session', 'startTime endTime classType room')
+      const sessions = await WeeklySessionClass.find(query)
         .populate('subject', 'name code')
-        .sort({ date: -1 })
+        .sort({ date: -1, startTime: -1 })
         .limit(limit)
         .skip(skip);
+      
+      const records = await Promise.all(sessions.map(async (session) => {
+        const attendance = await Attendance.findOne({
+          student: studentIdStr,
+          session: session._id
+        });
+
+        return {
+          _id: attendance ? attendance._id : session._id,
+          student: studentIdStr,
+          subject: session.subject,
+          session: {
+            _id: session._id,
+            startTime: session.startTime,
+            endTime: session.endTime,
+            classType: session.classType,
+            room: session.room,
+            status: session.status
+          },
+          date: session.date,
+          status: attendance ? attendance.status : (session.status === 'cancelled' ? 'cancelled' : 'unmarked')
+        };
+      }));
       
       let stats = null;
       if (subjectId) {
@@ -229,7 +270,7 @@ class AttendanceService {
         pagination: {
           limit,
           skip,
-          total: await Attendance.countDocuments(query)
+          total: await WeeklySessionClass.countDocuments(query)
         }
       };
     } catch (error) {
@@ -296,6 +337,17 @@ class AttendanceService {
               subject: sub._id
           });
 
+          const recentAttendanceRecords = await Attendance.find({
+              student: studentIdStr,
+              subject: sub._id
+          }).sort({ date: -1 }).limit(10).select('date session status');
+
+          const recentHistory = recentAttendanceRecords.map(record => ({
+              id: record.session ? record.session.toString() : record._id.toString(),
+              date: record.date ? record.date.toISOString().split('T')[0] : new Date().toISOString().split('T')[0],
+              status: record.status || 'unmarked'
+          }));
+
           return {
               subjectId: sub._id,
               subjectName: sub.name,
@@ -303,7 +355,8 @@ class AttendanceService {
               total: subScheduledCount,
               present: subPresentCount,
               absent: Math.max(0, subScheduledCount - subPresentCount),
-              percentage: subScheduledCount > 0 ? ((subPresentCount / subScheduledCount) * 100).toFixed(2) : 100
+              percentage: subScheduledCount > 0 ? ((subPresentCount / subScheduledCount) * 100).toFixed(2) : 100,
+              recentHistory: recentHistory.reverse()
           };
       }));
 

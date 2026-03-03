@@ -71,16 +71,88 @@ async function completeProfile(req, res) {
         // Get verified data
         const pendingUser = await OtpService.getCompletedSignupData(decoded.email);
         console.log(req.body)
-;      
-        const user = await UserService.createUser({
-            collegeId: req.body.collegeId,
-            email: pendingUser.email, // Use email from trusted PendingUser
-            password: pendingUser.password, // Use hashed password from PendingUser
+        let { collegeId, customCollegeName, batch, customBatchName, section, customSectionName } = req.body;
+        
+        let finalCollegeStringId = collegeId; // Needs to be the string for UserService
+        let finalBatchId = batch;
+        let finalSectionId = section;
+        let isCustomSectionCreated = false;
+
+        const College = require('../models/College');
+        const Batch = require('../models/Batch');
+        const Section = require('../models/Section');
+
+        // Check College
+        let collegeObjectId = null;
+        if (typeof collegeId === 'string' && collegeId.startsWith('custom_')) {
+            const newCollegeIdString = `CUST_${Date.now()}_${Math.floor(Math.random()*1000)}`;
+            const newCollege = new College({
+                name: customCollegeName || 'Unknown College',
+                collegeId: newCollegeIdString,
+                isVerified: false
+            });
+            await newCollege.save();
+            collegeObjectId = newCollege._id;
+            finalCollegeStringId = newCollegeIdString;
+        } else {
+            // Need the ObjectId for Batch creation if custom batch is created
+            if (typeof batch === 'string' && batch.startsWith('custom_')) {
+                const existingCollege = await College.findOne({ collegeId: collegeId });
+                if (existingCollege) {
+                    collegeObjectId = existingCollege._id;
+                }
+            }
+        }
+
+        // Check Batch
+        if (typeof batch === 'string' && batch.startsWith('custom_')) {
+            let program = customBatchName || 'Unknown';
+            let year = 'Unknown';
+            if (customBatchName) {
+                const parts = customBatchName.split(' ');
+                if (parts.length >= 2) {
+                    year = parts.pop();
+                    program = parts.join(' ');
+                }
+            }
+
+            const newBatch = new Batch({
+                program: program,
+                year: year,
+                college: collegeObjectId,
+                isVerified: false
+            });
+            await newBatch.save();
+            finalBatchId = newBatch._id;
+        }
+
+        // Check Section
+        if (typeof section === 'string' && section.startsWith('custom_')) {
+            const newSection = new Section({
+                name: customSectionName || 'Unknown',
+                batch: finalBatchId,
+                isVerified: false
+            });
+            await newSection.save();
+            finalSectionId = newSection._id;
+            isCustomSectionCreated = true;
+        }
+        
+        const userPayload = {
+            collegeId: finalCollegeStringId,
+            email: pendingUser.email,
+            password: pendingUser.password,
             name: pendingUser.name,
-            batch: req.body.batch,
-            section: req.body.section,
-            collegeEmailId: pendingUser.email // Assuming 'collegeEmailId' maps to the email
-        });
+            batch: finalBatchId,
+            section: finalSectionId,
+            collegeEmailId: pendingUser.email 
+        };
+
+        if (isCustomSectionCreated) {
+            userPayload.roles = ['local-admin'];
+        }
+
+        const user = await UserService.createUser(userPayload);
 
         // Cleanup
         await OtpService.clearPendingUser(pendingUser.email);

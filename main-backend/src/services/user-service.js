@@ -88,7 +88,7 @@ async function createUser(data) {
       collegeId: college.collegeId,
       batch: batchId,
       section: sectionId,
-      roles: ['student']
+      roles: data.roles || ['student']
     });
 
     await user.save();
