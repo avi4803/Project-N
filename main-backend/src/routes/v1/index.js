@@ -10,6 +10,7 @@ const weeklySessionRouter = require('./weekly-session-route');
 const broadcastRouter = require('./broadcast-route');
 const subjectRouter = require('./subject-route');
 const notificationRouter = require('./notification-route');
+const holidayRouter = require('./holiday-route');
 
 const { AuthRequestMiddlewares } = require('../../middlewares');
 
@@ -30,5 +31,6 @@ router.use('/weekly-session', weeklySessionRouter);
 router.use('/broadcast', broadcastRouter);
 router.use('/subjects', subjectRouter);
 router.use('/notifications', notificationRouter);
+router.use('/holidays', holidayRouter);
 
 module.exports = router;

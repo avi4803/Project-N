@@ -7,6 +7,7 @@ const CacheService = require('./cache-service');
 const WeeklySessionClass = require('../models/WeeklySessionClass');
 const WeeklySession = require('../models/WeeklySession');
 const WeeklySessionService = require('./weekly-session-service');
+const HolidayService = require('./holiday-service');
 
 class AttendanceService {
   
@@ -40,6 +41,11 @@ class AttendanceService {
       const student = await User.findById(studentIdStr);
       if (!student) {
         throw new AppError('Student not found', StatusCodes.NOT_FOUND);
+      }
+      
+      const isHoliday = await HolidayService.isHoliday(student.college, session.dateString);
+      if (isHoliday) {
+        throw new AppError('Cannot perform actions on a holiday.', StatusCodes.BAD_REQUEST);
       }
       
       // Upsert attendance record
@@ -123,6 +129,22 @@ class AttendanceService {
         .sort({ startTime: 1 });
       }
       
+      const isHoliday = await HolidayService.isHoliday(student.college, istComp.dateString);
+      if (isHoliday) {
+          const holidaySessions = [{
+              isHoliday: true,
+              status: 'holiday',
+              cancellationReason: isHoliday,
+              dateString: istComp.dateString,
+              title: isHoliday,
+              startTime: '00:00',
+              endTime: '23:59',
+              subject: { name: isHoliday, code: 'HOL' }
+          }];
+          await CacheService.set(cacheKey, holidaySessions, 300);
+          return holidaySessions;
+      }
+
       const sessionsWithStatus = await Promise.all(
         sessions.map(async session => {
           const attendance = await Attendance.findOne({
@@ -131,7 +153,9 @@ class AttendanceService {
           });
           
           return {
-            ...session.toObject(),
+            ...session.toObject ? session.toObject() : session,
+            status: session.status,
+            cancellationReason: session.cancellationReason,
             attendanceMarked: !!attendance,
             attendanceStatus: attendance?.status || null
           };
@@ -162,6 +186,12 @@ class AttendanceService {
       const cacheKey = `user:${studentIdStr}:active-class`;
       const cachedData = await CacheService.get(cacheKey);
       if (cachedData !== undefined) return cachedData;
+      
+      const isHoliday = await HolidayService.isHoliday(student.college, istComp.dateString);
+      if (isHoliday) {
+          await CacheService.set(cacheKey, null, 60);
+          return null;
+      }
       
       const session = await WeeklySessionClass.findOne({
         batch: student.batch,
@@ -235,11 +265,16 @@ class AttendanceService {
         .limit(limit)
         .skip(skip);
       
+      const holidaysMap = await HolidayService.getHolidaysForCollege(student.college);
+
       const records = await Promise.all(sessions.map(async (session) => {
         const attendance = await Attendance.findOne({
           student: studentIdStr,
           session: session._id
         });
+
+        const isHol = holidaysMap[session.dateString];
+        const finalStatus = isHol ? 'holiday' : (session.status === 'cancelled' ? 'cancelled' : session.status);
 
         return {
           _id: attendance ? attendance._id : session._id,
@@ -251,10 +286,11 @@ class AttendanceService {
             endTime: session.endTime,
             classType: session.classType,
             room: session.room,
-            status: session.status
+            status: finalStatus,
+            cancellationReason: isHol || session.cancellationReason
           },
           date: session.date,
-          status: attendance ? attendance.status : (session.status === 'cancelled' ? 'cancelled' : 'unmarked')
+          status: isHol ? 'holiday' : (attendance ? attendance.status : (session.status === 'cancelled' ? 'cancelled' : 'unmarked'))
         };
       }));
       
@@ -296,10 +332,14 @@ class AttendanceService {
       // For precision, we include all days before today, and today's classes that have already started
       const currentTime = now.toLocaleTimeString('en-GB', { timeZone: 'Asia/Kolkata', hour: '2-digit', minute: '2-digit', hour12: false });
       
+      const holidaysMap = await HolidayService.getHolidaysForCollege(student.college);
+      const holidayDates = Object.keys(holidaysMap);
+
       let scheduledQuery = {
         batch: student.batch,
         section: student.section,
         status: { $nin: ['cancelled', 'rescheduled'] },
+        dateString: { $nin: holidayDates },
         $or: [
             { dateString: { $lt: istComp.dateString } }, // Previous days (using dateString for IST safety)
             { dateString: istComp.dateString, startTime: { $lte: currentTime } } // Today's past classes

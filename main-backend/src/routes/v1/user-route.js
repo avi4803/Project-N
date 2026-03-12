@@ -71,4 +71,9 @@ router.post('/reset-password',
     AuthRequestMiddlewares.validateResetPasswordRequest,
     UserController.resetPassword);
 
+// Delete User Account
+router.delete('/:id',
+    AuthRequestMiddlewares.checkAuth,
+    UserController.deleteUserAccount);
+    
 module.exports = router ;

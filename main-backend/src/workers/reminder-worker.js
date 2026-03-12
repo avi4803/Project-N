@@ -2,6 +2,7 @@ const reminderQueue = require('../config/reminder-queue');
 const WeeklySessionClass = require('../models/WeeklySessionClass');
 const User = require('../models/User');
 const { publishNotification } = require('../services/notification-publisher');
+const HolidayService = require('../services/holiday-service');
 
 /**
  * Process delayed class reminders
@@ -23,6 +24,12 @@ reminderQueue.process(async (job) => {
 
         if (cls.status === 'cancelled') {
             console.log(`${logPrefix} Class is cancelled. Skipping reminder.`);
+            return;
+        }
+
+        const isHoliday = await HolidayService.isHoliday(cls.college, cls.dateString);
+        if (isHoliday) {
+            console.log(`${logPrefix} Class is on a holiday. Skipping reminder.`);
             return;
         }
 

@@ -355,6 +355,51 @@ async function resetUserPassword(userId, newPassword) {
   }
 }
 
+async function deleteUserAccount(userId, password) {
+  try {
+    const user = await User.findById(userId);
+    if (!user) {
+      throw new AppError('User not found', StatusCodes.NOT_FOUND);
+    }
+
+    if (!user.isActive) {
+      throw new AppError('User account is already deleted', StatusCodes.BAD_REQUEST);
+    }
+
+    // Verify password
+    if (password) {
+        const passwordMatch = await user.comparePassword(password);
+        if (!passwordMatch) {
+          throw new AppError('Invalid Password', StatusCodes.BAD_REQUEST);
+        }
+    } else {
+        throw new AppError('Password is required to delete account', StatusCodes.BAD_REQUEST);
+    }
+
+    // Scramble personal data and soft delete
+    const randomId = new mongoose.Types.ObjectId().toString().substring(0, 8);
+    
+    user.name = "Deleted User";
+    user.email = `deleted_${randomId}@example.com`;
+    user.fcmToken = null;
+    user.isActive = false;
+
+    // Optional: Log warnings if they are a local-admin
+    if (user.roles.includes('local-admin')) {
+      console.warn(`User ${userId} was a local-admin for section ${user.section}. Section may need a new manager.`);
+    }
+
+    await user.save();
+
+    return { message: 'Account successfully deleted and anonymized' };
+  } catch (error) {
+    if (error instanceof AppError) throw error;
+    throw new AppError('Error deleting user account', StatusCodes.INTERNAL_SERVER_ERROR);
+  }
+}
+
+
+
 module.exports = {
   userSignUp: createUser ,
   createUser, // Renamed createUser to userSignUp as per instruction
@@ -366,5 +411,6 @@ module.exports = {
   getDashboardData,
   updateFcmToken,
   updateReminderSettings,
-  resetUserPassword
-};
+  resetUserPassword,
+  deleteUserAccount
+}

@@ -109,11 +109,27 @@ async function completeProfile(req, res) {
             let program = customBatchName || 'Unknown';
             let year = 'Unknown';
             if (customBatchName) {
-                const parts = customBatchName.split(' ');
-                if (parts.length >= 2) {
-                    year = parts.pop();
-                    program = parts.join(' ');
+                const yearMatch = customBatchName.match(/\b(19|20)\d{2}\b/);
+                if (yearMatch) {
+                    year = yearMatch[0];
+                    program = customBatchName.replace(year, '').trim();
+                    // Unwrap if the whole string is inside parentheses, e.g., "(B. Tech)"
+                    if (program.startsWith('(') && program.endsWith(')')) {
+                        program = program.slice(1, -1).trim();
+                    }
+                    // Remove empty parentheses left over from year, e.g., "B. Tech ()"
+                    program = program.replace(/\(\s*\)/g, '').trim();
+                    // Clean up trailing hyphens or commas
+                    program = program.replace(/^[-,\s]+|[-,\s]+$/g, '');
+                } else {
+                    const parts = customBatchName.split(' ');
+                    if (parts.length >= 2) {
+                        year = parts.pop();
+                        program = parts.join(' ');
+                    }
                 }
+                
+                if (!program) program = 'Unknown Program';
             }
 
             const newBatch = new Batch({
@@ -401,6 +417,38 @@ async function resetPassword(req, res) {
         return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
     }
 }
+async function deleteUserAccount(req, res) {
+    try {
+        const { password } = req.body;
+        const targetUserId = req.params.id;
+        const requestUserId = req.user.id || req.user;
+        const requestUserRoles = req.user.roles || [];
+
+        // Determine if action is self-deletion or by an admin
+        const isSelf = targetUserId === requestUserId;
+        const isAdminAction = requestUserRoles.includes('admin');
+
+        if (!isSelf && !isAdminAction) {
+            return res.status(StatusCodes.FORBIDDEN).json({
+                message: 'You are not authorized to delete this account'
+            });
+        }
+
+        // Only require password if user is deleting their own account
+        const passwordRequired = isSelf ? password : null; // If admin, password might not be needed depending on your policy. We pass what we have.
+
+        const result = await UserService.deleteUserAccount(targetUserId, passwordRequired);
+        
+        SuccessResponse.message = result.message;
+        SuccessResponse.data = {};
+        return res.status(StatusCodes.OK).json(SuccessResponse);
+    } catch (error) {
+        console.error("❌ deleteUserAccount Error:", error.message);
+        ErrorResponse.message = error.message || 'Error deleting account';
+        ErrorResponse.error = error;
+        return res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json(ErrorResponse);
+    }
+}
 
 module.exports = {
     signup,
@@ -414,5 +462,6 @@ module.exports = {
     updateReminderSettings,
     forgotPassword,
     verifyResetOtp,
-    resetPassword
+    resetPassword,
+    deleteUserAccount
 }

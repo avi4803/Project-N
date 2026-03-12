@@ -41,7 +41,7 @@ const weeklySessionClassSchema = new mongoose.Schema({
   // Status Management
   status: {
     type: String,
-    enum: ['scheduled', 'cancelled', 'rescheduled', 'completed'],
+    enum: ['scheduled', 'cancelled', 'rescheduled', 'completed', 'holiday'],
     default: 'scheduled'
   },
   isExtraClass: {

@@ -10,6 +10,7 @@ const User = require('../models/User');
 const { publishNotification } = require('./notification-publisher');
 const reminderQueue = require('../config/reminder-queue');
 const CacheService = require('./cache-service');
+const HolidayService = require('./holiday-service');
 
 class WeeklySessionService {
 
@@ -179,6 +180,12 @@ class WeeklySessionService {
             }
             const istComp = this.getISTComponents(classDate);
 
+            // Skip generating if it's already a known holiday
+            const isHoliday = await HolidayService.isHoliday(session.college, istComp.dateString);
+            if (isHoliday) {
+                 continue;
+            }
+
             const newClass = await WeeklySessionClass.create({
                 weeklySession: session._id,
                 templateId: cls._id,
@@ -221,6 +228,11 @@ class WeeklySessionService {
     const cls = await WeeklySessionClass.findById(classId)
         .populate('subject batch section');
     if (!cls) throw new AppError('Class not found', StatusCodes.NOT_FOUND);
+
+    const isHoliday = await HolidayService.isHoliday(cls.college, cls.dateString);
+    if (isHoliday) {
+        throw new AppError('Cannot perform actions on a holiday.', StatusCodes.BAD_REQUEST);
+    }
 
     if (cls.status === 'cancelled') {
         throw new AppError('Class is already cancelled', StatusCodes.BAD_REQUEST);
@@ -280,6 +292,11 @@ class WeeklySessionService {
     const cls = await WeeklySessionClass.findById(classId)
         .populate('subject batch section');
     if (!cls) throw new AppError('Class not found', StatusCodes.NOT_FOUND);
+
+    const isHoliday = await HolidayService.isHoliday(cls.college, cls.dateString);
+    if (isHoliday) {
+        throw new AppError('Cannot perform actions on a holiday.', StatusCodes.BAD_REQUEST);
+    }
 
     const oldDate = cls.date;
     const oldTime = cls.startTime;
@@ -523,19 +540,14 @@ class WeeklySessionService {
     const cls = await WeeklySessionClass.findById(classId).populate('subject batch section');
     if (!cls) throw new AppError('Class not found', StatusCodes.NOT_FOUND);
 
-    // Safety Check: Don't delete if attendance data exists
-    const Attendance = require('../models/Attendance');
-    const hasAttendance = await Attendance.exists({ session: classId });
-    if (hasAttendance) {
-        throw new AppError('Cannot delete class that has attendance records. Please cancel it instead.', StatusCodes.BAD_REQUEST);
+    const isHoliday = await HolidayService.isHoliday(cls.college, cls.dateString);
+    if (isHoliday) {
+        throw new AppError('Cannot perform actions on a holiday.', StatusCodes.BAD_REQUEST);
     }
 
-    // Prevent past class deletion (Timezone-Agnostic Numeric Validation)
-    const classTimestamp = new Date(`${cls.yearNum}-${String(cls.monthNum).padStart(2,'0')}-${String(cls.dayNum).padStart(2,'0')}T${cls.startTime}:00+05:30`);
-    
-    if (classTimestamp < new Date()) {
-        throw new AppError('This class has passed', StatusCodes.BAD_REQUEST);
-    }
+    // Clean Sweep: Cascade delete attendance if it exists
+    const Attendance = require('../models/Attendance');
+    await Attendance.deleteMany({ session: classId });
 
     // Cancel reminders
     await this.cancelReminders(classId);
@@ -543,28 +555,31 @@ class WeeklySessionService {
     // Delete
     await WeeklySessionClass.findByIdAndDelete(classId);
 
-    // 📣 Notify Section
-    try {
-        const batchId = cls.batch._id.toString();
-        const sectionId = cls.section._id.toString();
-        const dateFormatted = new Date(cls.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
+    // Notify Section (Only if it's a future or current class being deleted)
+    const classTimestamp = new Date(`${cls.yearNum}-${String(cls.monthNum).padStart(2,'0')}-${String(cls.dayNum).padStart(2,'0')}T${cls.startTime}:00+05:30`);
+    if (classTimestamp >= new Date()) {
+        try {
+            const batchId = cls.batch._id.toString();
+            const sectionId = cls.section._id.toString();
+            const dateFormatted = new Date(cls.date).toLocaleDateString('en-US', { weekday: 'long', month: 'short', day: 'numeric' });
 
-        await publishNotification('CLASS_CANCELLED', {
-            batchId,
-            sectionId,
-            title: 'Class Removed',
-            message: `${cls.subject.name} on ${dateFormatted} at ${cls.startTime} has been removed from the schedule.`,
-            subjectName: cls.subject.name,
-            reason: 'Class removed from schedule'
-        });
-    } catch (err) {
-        console.error('Failed to send notification for class deletion:', err);
+            await publishNotification('CLASS_CANCELLED', {
+                batchId,
+                sectionId,
+                title: 'Class Removed',
+                message: `${cls.subject.name} on ${dateFormatted} at ${cls.startTime} has been removed from the schedule.`,
+                subjectName: cls.subject.name,
+                reason: 'Class removed from schedule'
+            });
+        } catch (err) {
+            console.error('Failed to send notification for class deletion:', err);
+        }
     }
 
     // 🚀 Invalidate Cache
     this.invalidateDashboardCache(cls.batch._id, cls.section._id);
 
-    return { message: 'Class deleted successfully' };
+    return { message: 'Class and associated attendance records deleted successfully' };
   }
 
   async getSessionForWeek(batchId, sectionId, date) {
@@ -584,7 +599,35 @@ class WeeklySessionService {
         .populate('subject', 'name code')
         .sort({ date: 1, startTime: 1 });
 
-      return { session, classes };
+      const filteredClasses = [];
+      const holidaysMap = await HolidayService.getHolidaysForCollege(session.college);
+      const processedHolidayDates = new Set();
+
+      for (const cls of classes) {
+          const holidayReason = holidaysMap[cls.dateString];
+          if (holidayReason) {
+              if (!processedHolidayDates.has(cls.dateString)) {
+                  // Add a single placeholder for the holiday
+                  filteredClasses.push({
+                      isHoliday: true,
+                      status: 'holiday',
+                      cancellationReason: holidayReason,
+                      dateString: cls.dateString,
+                      date: cls.date, // keep original date for sorting
+                      day: cls.day,
+                      startTime: '00:00',
+                      endTime: '23:59',
+                      title: holidayReason,
+                      subject: { name: holidayReason, code: 'HOL' }
+                  });
+                  processedHolidayDates.add(cls.dateString);
+              }
+              continue; // Skip individual classes on holiday
+          }
+          filteredClasses.push(cls);
+      }
+
+      return { session, classes: filteredClasses };
   }
 
   /**
@@ -617,6 +660,7 @@ class WeeklySessionService {
               return [
                   CacheService.delByPattern(`user:${id}:dashboard:*`),
                   CacheService.delByPattern(`user:${id}:next-class:*`),
+                  CacheService.delByPattern(`user:${id}:overall-stats:*`),
                   CacheService.del(`user:${id}:active-class`),
                   CacheService.del(`user:${id}:full-dashboard`)
               ];
