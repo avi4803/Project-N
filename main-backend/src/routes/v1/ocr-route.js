@@ -4,46 +4,60 @@ const { AuthRequestMiddlewares } = require('../../middlewares');
 
 const router = express.Router();
 
-// Process timetable image - Authenticated users only
+/**
+ * @route   POST /api/v1/ocr/submit
+ * @desc    Start an asynchronous OCR process (Step 1: Submission)
+ */
 router.post(
-    '/process',
+    '/submit',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
-    AuthRequestMiddlewares.rateLimit(3, 15 * 60 * 1000, 'ocr-process'),
-    OcrController.uploadAndProcessTimetable
+    AuthRequestMiddlewares.rateLimit(3, 15 * 60 * 1000, 'ocr-submit'),
+    OcrController.submitOcrJob
 );
 
-// Create timetable from OCR job - Authenticated users
-router.post(
-    '/jobs/:jobId/create-timetable',
-    AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdminOrLocalAdmin,
-    OcrController.createTimetableFromOCR
-);
-
-// Get OCR job status - Authenticated users
+/**
+ * @route   GET /api/v1/ocr/status/:jobId
+ * @desc    Check status of an OCR process (Step 3: Polling)
+ */
 router.get(
-    '/jobs/:jobId',
+    '/status/:jobId',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
-    OcrController.getOCRJobStatus
+    OcrController.getOcrJobStatus
 );
 
-// Get user's OCR jobs - Authenticated users
-router.get(
-    '/jobs',
-    AuthRequestMiddlewares.checkAuth,
-    AuthRequestMiddlewares.isAdminOrLocalAdmin,
-    OcrController.getUserOCRJobs
-);
-
-// Retry failed OCR job - Authenticated users
+/**
+ * @route   POST /api/v1/ocr/confirm/:jobId
+ * @desc    Confirm and finalize OCR results into a timetable
+ */
 router.post(
-    '/jobs/:jobId/retry',
+    '/confirm/:jobId',
     AuthRequestMiddlewares.checkAuth,
     AuthRequestMiddlewares.isAdminOrLocalAdmin,
-    AuthRequestMiddlewares.rateLimit(5, 15 * 60 * 1000, 'ocr-retry'),
-    OcrController.retryOCRJob
+    OcrController.confirmOcrTimetable
+);
+
+/**
+ * @route   GET /api/v1/ocr/history
+ * @desc    Get list of recent OCR jobs
+ */
+router.get(
+    '/history',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    OcrController.getJobHistory
+);
+
+/**
+ * @route   POST /api/v1/ocr/retry/:jobId
+ * @desc    Retry a failed OCR job
+ */
+router.post(
+    '/retry/:jobId',
+    AuthRequestMiddlewares.checkAuth,
+    AuthRequestMiddlewares.isAdminOrLocalAdmin,
+    OcrController.retryJob
 );
 
 module.exports = router;

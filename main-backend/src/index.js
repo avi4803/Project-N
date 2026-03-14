@@ -3,7 +3,7 @@ const { ServerConfig } = require('./config');
 const apiRoutes = require('./routes');
 const connectDB = require('./models/index');
 
-// require('./jobs/ocrJob');
+require('./jobs/ocrJob');
 
 const app = express();
 app.set('trust proxy', 1); // Enable proxy trust for ngrok/docker
