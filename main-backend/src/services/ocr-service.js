@@ -6,6 +6,7 @@ const Timetable = require('../models/Timetable');
 const Batch = require('../models/Batch');
 const Section = require('../models/Section');
 const SubjectService = require('./subject-service');
+const WeeklySessionService = require('./weekly-session-service');
 const { GEMINI_API_KEY } = require('../config/server-config');
 const mongoose = require('mongoose');
 const axios = require('axios');
@@ -245,6 +246,18 @@ async function createTimetableFromOCR(jobId, userId, confirmedSchedule) {
 
     // Auto-create subjects
     await SubjectService.createSubjectsFromTimetable(timetable._id);
+
+    // 🚀 NEW: Generate sessions for the current week immediately
+    // This solves the issue where "nothing reflects" after creation
+    try {
+        console.log(`🔄 Expanding timetable into weekly sessions for batch ${job.batch}...`);
+        await WeeklySessionService.generateForWeek(new Date());
+        
+        // Invalidate cache so users see the new classes immediately
+        await WeeklySessionService.invalidateDashboardCache(job.batch, job.section);
+    } catch (sessionError) {
+        console.error('⚠️ Failed to auto-generate weekly sessions:', sessionError.message);
+    }
     
     // Cleanup the job record after success
     await OcrJob.findByIdAndDelete(jobId);
