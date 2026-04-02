@@ -1,356 +1,78 @@
-# Project-N - Node.js Backend API
+# 🚀 Classmode: The Ultimate Academic Operating System
 
-This is a comprehensive Node.js backend project template built with **MongoDB** and **Express.js**. It follows best practices for project structure, error handling, authentication, and authorization. Feel free to customize it according to your needs.
+[![Node.js Version](https://img.shields.io/badge/node-%3E%3D18.x-green.svg)](https://nodejs.org/)
+[![Express.js](https://img.shields.io/badge/framework-Express.js-blue.svg)](https://expressjs.com/)
+[![MongoDB](https://img.shields.io/badge/database-MongoDB-brightgreen.svg)](https://www.mongodb.com/)
+[![Redis](https://img.shields.io/badge/cache-Redis-red.svg)](https://redis.io/)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 
-## 📁 Project Structure
-
-`src` → Contains all the source code for the project (excluding tests)
-
-### Inside the `src` folder:
-
-- **`config`** → Configuration and setup for libraries and modules
-  - `server-config.js` - Environment variables setup using `dotenv`
-  - `database.js` - MongoDB connection configuration
-  
-- **`routes`** → Route definitions with their corresponding middleware and controllers
-
-- **`middlewares`** → Request interceptors for validation, authentication, and authorization
-
-- **`controllers`** → Handle incoming requests, pass data to services, and structure API responses
-
-- **`repositories`** → Database interaction layer (not used in current MongoDB implementation as services interact directly with models)
-
-- **`services`** → Business logic layer that interacts with MongoDB models
-
-- **`models`** → MongoDB/Mongoose schema definitions
-
-- **`utils`** → Helper methods, custom error classes, and utility functions
+Classmode is a comprehensive backend ecosystem designed to digitize and automate the modern academic experience. From **zero-faculty attendance** to **AI-driven document processing**, it transforms how institutions manage their daily operations.
 
 ---
 
-## 🚀 Setup Instructions
+## 🌟 What Makes Classmode Different?
 
-### 1. Clone and Install Dependencies
-
-```bash
-# Clone or download this repository
-cd Project-N
-
-# Install dependencies
-npm install
-```
-
-### 2. Environment Configuration
-
-Create a `.env` file in the root directory:
-
-```env
-PORT=3000
-MONGO_URI=mongodb+srv://username:password@cluster.mongodb.net/database-name?retryWrites=true&w=majority
-JWT_SECRET=your-super-secret-jwt-key-minimum-32-characters-long
-JWT_EXPIRY=24h
-```
-
-**Important Notes:**
-- Replace `username`, `password`, `cluster`, and `database-name` with your actual MongoDB credentials
-- Generate a strong `JWT_SECRET` using: `node -e "console.log(require('crypto').randomBytes(64).toString('hex'))"`
-- Never commit `.env` to version control (already in `.gitignore`)
-
-### 3. MongoDB Setup
-
-**Option A: MongoDB Atlas (Cloud - Recommended)**
-1. Go to [MongoDB Atlas](https://www.mongodb.com/cloud/atlas)
-2. Create a free cluster
-3. Create a database user
-4. Whitelist your IP address (or use `0.0.0.0/0` for development)
-5. Get your connection string and add it to `.env` as `MONGO_URI`
-
-**Option B: Local MongoDB**
-```env
-MONGO_URI=mongodb://localhost:27017/project-n
-```
-
-### 4. Start the Server
-
-```bash
-# Development mode (with nodemon)
-npm run dev
-
-# Production mode
-npm start
-```
-
-Server will run on `http://localhost:3000` (or your configured PORT)
+Instead of just being a database, Classmode acts as a **smart orchestrator** for your campus. It handles the "boring" administrative tasks so faculty and students can focus on what matters: **Education**.
 
 ---
 
-## 📮 API Documentation - Postman Guide
+## 🚀 Key Features
 
-### Base URL
-```
-http://localhost:3000/api/v1
-```
+### 🔐 Security & Identity Hub
+- **Multi-Role RBAC**: Granular dashboard access for Students, Institutional Admins, and Class Admins.
+- **Secure Authentication**: JWT-based stateless auth with session blacklisting for maximum security.
+- **OTP Verification**: Integrated One-Time Password service for secure login and account recovery.
+- **Institutional Isolation**: Support for multiple colleges/campuses with strict cohort-level data separation.
 
----
+### ✅ Attendance V2 & Gamification
+- **Faculty-Free Automation**: Session orchestration via persistent cron jobs—no manual faculty involvement needed.
+- **Weekly Recurring Cycles**: Seamless management of semester-long repeating schedules with dynamic session generation.
+- **Gamification Engine**: Smart streaks, achievement badges (e.g., *Streak Master*, *Early Bird*), and milestone rewards to boost engagement.
+- **Correction Workflow**: Formal request-response system for attendance disputes with a full audit trail.
+- **Daily Status Summaries**: Automatic reporting of daily attendance statistics directly to the student dashboard.
 
-## 🔐 Authentication & Authorization
+### 📅 Resource & Schedule Management
+- **Intelligent Timetables**: Conflict-free Class/Lab scheduling with multi-faculty and batch orchestration.
+- **Batch & Section Orchestration**: Hierarchical management of academic units (Departments -> Batches -> Sections).
+- **Holiday & Event Engine**: Institution-wide academic calendars with automatic session rescheduling and alerts.
+- **Subject Management**: Granular tracking of subjects, faculty assignments, and academic status.
 
-### 1. User Signup (Registration)
+### ⚡ AI-Driven Document Processing
+- **Gemini AI OCR**: Integrated high-accuracy extraction of data from IDs and documents via **Google Gemini AI**.
+- **Self-Service Verification**: Automatic cross-referencing of document data for student registration and verification.
 
-**Endpoint:** `POST /api/v1/signup`
-
-**Headers:**
-```
-Content-Type: application/json
-```
-
-**Request Body (JSON):**
-```json
-{
-  "name": "John Doe",
-  "email": "john.doe@example.com",
-  "password": "SecurePassword123",
-  "batch": "2024",
-  "college": "MIT"
-}
-```
-
-**Success Response (201):**
-```json
-{
-  "success": true,
-  "message": "User created successfully",
-  "data": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "John Doe",
-    "email": "john.doe@example.com",
-    "roles": ["student"],
-    "batch": "2024",
-    "college": "MIT"
-  },
-  "error": {}
-}
-```
+### 📮 Real-time Connectivity & Alerts
+- **Smart Push Notifications (FCM)**: Real-time alerts for class reminders, attendance prompts, and latest news.
+- **Automated Class Reminders**: Pre-class notifications to help minimize absenteeism.
+- **Campus-Wide Broadcasts**: Targeted messaging to specific batches, classes, or the entire institution.
+- **Transactional Emailing**: High-delivery `Nodemailer` integration for OTPs, administrative alerts, and system notifications.
 
 ---
 
-### 2. User Login (Sign In)
+## 📈 Built for Scale & Reliability
 
-**Endpoint:** `POST /api/v1/signin`
-
-**Headers:**
-```
-Content-Type: application/json
-```
-
-**Request Body (JSON):**
-```json
-{
-  "email": "john.doe@example.com",
-  "password": "SecurePassword123"
-}
-```
-
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "User logged in successfully",
-  "data": {
-    "token": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpZCI6IjYwN2YxZjc3YmNmODZjZDc5OTQzOTAxMSIsImVtYWlsIjoiam9obi5kb2VAZXhhbXBsZS5jb20iLCJpYXQiOjE2MzU0MjU2MDAsImV4cCI6MTYzNTUxMjAwMH0.xyz..."
-  },
-  "error": {}
-}
-```
-
-**⚠️ Important:** Copy the `token` value - you'll need it for all protected routes!
+Classmode isn't just a prototype; it's a production-ready engine engineered for performance:
+- **Sub-Millisecond Speed**: Frequently accessed data (like today's timetable) is cached in **Redis** for lightning-fast retrieval.
+- **Non-Blocking Background Tasks**: Heavy tasks like OCR and bulk emailing are offloaded to **Bull Queues**, ensuring the API remains highly responsive even during peak hours.
+- **Self-Healing Cron Jobs**: Automated health checks and maintenance jobs run 24/7 to ensure system integrity and data consistency.
 
 ---
 
-### 3. Access Protected Routes (Authentication)
+## 🚢 Reliable Deployment
 
-For any protected endpoint, you must include the JWT token in the request headers.
-
-**Method 1: Custom Header (Current Implementation)**
-
-**Headers:**
-```
-Content-Type: application/json
-x-access-token: eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
-
-**Method 2: Standard Authorization Header (Recommended)**
-
-If you modify the middleware to use standard Bearer tokens:
-
-**Headers:**
-```
-Content-Type: application/json
-Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
-```
+We use **GitHub Actions** for automated testing and deployment. To maintain total control over your releases, we've implemented a **Manual Trigger** system:
+1. 🛠️ **Build & Test**: Every push to `main` is automatically validated for quality.
+2. 🚀 **One-Click Deploy**: Deployment to AWS only starts when you manually trigger it from the Actions tab, giving you total control over downtime and versioning.
 
 ---
 
-### 4. Add Role to User (Admin Only)
+## 📘 Project Resources
 
-**Endpoint:** `POST /api/v1/user/role`
-
-**Headers:**
-```
-Content-Type: application/json
-x-access-token: <admin-user-jwt-token>
-```
-
-**Request Body (JSON):**
-```json
-{
-  "id": "507f1f77bcf86cd799439011",
-  "role": "admin"
-}
-```
-
-**Available Roles:**
-- `student` (default)
-- `admin`
-- `local-admin`
-
-**Success Response (200):**
-```json
-{
-  "success": true,
-  "message": "Role added successfully",
-  "data": {
-    "_id": "507f1f77bcf86cd799439011",
-    "name": "John Doe",
-    "email": "john.doe@example.com",
-    "roles": ["student", "admin"]
-  },
-  "error": {}
-}
-```
+- ⚙️ [Deployment & Engineering Guide](SETUP_GUIDE.md)
+- ✅ [Deep Dive: Attendance V2 Logic](ATTENDANCE_SYSTEM_V2.md)
+- 🧪 [QA & Testing Protocols](TESTING_GUIDE.md)
 
 ---
 
-## 🎯 Postman Tips & Tricks
-
-### Using Environment Variables
-
-1. **Create a Postman Environment** (top-right corner → Environments → Create)
-2. **Add variables:**
-   ```
-   base_url: http://localhost:3000/api/v1
-   auth_token: (leave empty initially)
-   ```
-
-3. **Auto-save token after login:**
-   - Go to your `/signin` request
-   - Click on the **Tests** tab
-   - Add this script:
-   ```javascript
-   if (pm.response.code === 200) {
-       const response = pm.response.json();
-       pm.environment.set("auth_token", response.data.token);
-   }
-   ```
-
-4. **Use variables in requests:**
-   - URL: `{{base_url}}/signin`
-   - Headers: `x-access-token: {{auth_token}}`
-
-### Creating a Collection
-
-1. **Create a new Collection** named "Project-N API"
-2. **Add folders:**
-   - Authentication (signup, signin)
-   - User Management (add role, etc.)
-   - Protected Routes
-
-3. **Set collection-level headers:**
-   - Right-click collection → Edit
-   - Go to **Headers** tab
-   - Add: `Content-Type: application/json`
-
----
-
-## 🛡️ Common Error Responses
-
-### 400 Bad Request
-```json
-{
-  "success": false,
-  "message": "Invalid Password",
-  "data": {},
-  "error": {
-    "statusCode": 400,
-    "explanation": "Invalid Password"
-  }
-}
-```
-
-### 401 Unauthorized
-```json
-{
-  "success": false,
-  "message": "Missing JWT token",
-  "error": {
-    "statusCode": 400,
-    "explanation": "missing JWT token"
-  }
-}
-```
-
-### 404 Not Found
-```json
-{
-  "success": false,
-  "message": "No user found for given email",
-  "error": {
-    "statusCode": 404,
-    "explanation": "No user found for given email"
-  }
-}
-```
-
-### 409 Conflict (Duplicate Email)
-```json
-{
-  "success": false,
-  "message": "Email must be unique",
-  "error": {
-    "statusCode": 409,
-    "explanation": "Email must be unique"
-  }
-}
-```
-
----
-
-## 🔧 Development Workflow
-
-1. **Start MongoDB** (if using local)
-2. **Run the server:** `npm run dev`
-3. **Test authentication flow in Postman:**
-   - Signup → Get token
-   - Signin → Save token to environment
-   - Access protected routes using saved token
-
----
-
-## 📝 Additional Notes
-
-- **Password Security:** Passwords are hashed using bcrypt before storing
-- **Token Expiry:** JWT tokens expire based on `JWT_EXPIRY` setting
-- **Role-Based Access:** Check user roles using middleware before allowing certain operations
-- **Error Handling:** All errors are caught and returned in a consistent format
-
----
-
-## 🤝 Contributing
-
-Feel free to fork this project and customize it according to your needs. For major changes, please open an issue first to discuss what you would like to change.
-
----
-
-## 📄 License
-
-This project is open source and available under the MIT License.
+<p align="center">Built with ❤️ for the next generation of Academic Infrastructure</p>
+<p align="center"><b>Avinash Nishad</b></p>
