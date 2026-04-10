@@ -117,9 +117,15 @@ class WeeklySessionService {
 
     for (const timetable of timetables) {
       try {
+        // Validation: Ensure batch exists (Prevents "Cannot read properties of null (reading '_id')")
+        if (!timetable.batch) {
+          console.warn(`⚠️ Timetable ${timetable._id} has no valid batch linked. Skipping session generation.`);
+          continue;
+        }
+
         // 1. Create or Find WeeklySession Container
         let session = await WeeklySession.findOne({
-          batch: timetable.batch._id, // batch is populated
+          batch: timetable.batch._id,
           section: timetable.section,
           year,
           weekNumber
@@ -134,16 +140,32 @@ class WeeklySessionService {
              continue;
           }
 
-          session = await WeeklySession.create({
-            batch: timetable.batch._id,
-            section: timetable.section,
-            college: college,
-            startDate: monday,
-            endDate: sunday,
-            year,
-            weekNumber
-          });
+          try {
+            session = await WeeklySession.create({
+              batch: timetable.batch._id,
+              section: timetable.section,
+              college: college,
+              startDate: monday,
+              endDate: sunday,
+              year,
+              weekNumber
+            });
+          } catch (createErr) {
+            // Handle race condition: If another process created it simultaneously
+            if (createErr.code === 11000) {
+              session = await WeeklySession.findOne({
+                batch: timetable.batch._id,
+                section: timetable.section,
+                year,
+                weekNumber
+              });
+            } else {
+              throw createErr;
+            }
+          }
         }
+
+        if (!session) continue;
 
         // 2. Map Template Classes to Real Dates
         const templateClasses = timetable.schedule;
@@ -157,10 +179,10 @@ class WeeklySessionService {
             const classDate = new Date(monday);
             classDate.setDate(monday.getDate() + dayIndex);
 
-            // Check if class already exists (idempotency)
+            // Check if class already exists (Strict Slot Protection)
             const existingClass = await WeeklySessionClass.findOne({
-                weeklySession: session._id,
-                templateId: cls._id,
+                batch: timetable.batch._id,
+                section: timetable.section,
                 date: classDate,
                 startTime: cls.startTime
             });
@@ -186,31 +208,38 @@ class WeeklySessionService {
                  continue;
             }
 
-            const newClass = await WeeklySessionClass.create({
-                weeklySession: session._id,
-                templateId: cls._id,
-                title: cls.subject, 
-                subject: subjectDoc._id,
-                batch: timetable.batch._id,
-                section: timetable.section,
-                college: session.college, 
-                date: classDate,
-                dayNum: istComp.day,
-                monthNum: istComp.month,
-                yearNum: istComp.year,
-                dateString: istComp.dateString,
-                day: cls.day,
-                startTime: cls.startTime,
-                endTime: cls.endTime,
-                room: cls.room,
-                type: cls.type || 'Lecture',
-                status: 'scheduled'
-            });
+            try {
+                const newClass = await WeeklySessionClass.create({
+                    weeklySession: session._id,
+                    templateId: cls._id,
+                    title: cls.subject, 
+                    subject: subjectDoc._id,
+                    batch: timetable.batch._id,
+                    section: timetable.section,
+                    college: session.college, 
+                    date: classDate,
+                    dayNum: istComp.day,
+                    monthNum: istComp.month,
+                    yearNum: istComp.year,
+                    dateString: istComp.dateString,
+                    day: cls.day,
+                    startTime: cls.startTime,
+                    endTime: cls.endTime,
+                    room: cls.room,
+                    type: cls.type || 'Lecture',
+                    status: 'scheduled'
+                });
 
-            // Schedule Reminders
-            this.scheduleReminders(newClass);
+                // Schedule Reminders
+                this.scheduleReminders(newClass);
+            } catch (clsErr) {
+                if (clsErr.code === 11000) {
+                    // console.log(`ℹ️ Slot already occupied for ${cls.subject} at ${cls.startTime}. Skipping.`);
+                    continue; 
+                }
+                throw clsErr;
+            }
         }
-
 
         createdCount++;
 
