@@ -74,5 +74,5 @@ We use **GitHub Actions** for automated testing and deployment. To maintain tota
 
 ---
 
-<p align="center">Built with ❤️ for the next generation of Academic Infrastructure</p>
+<p align="center">Built with ❤️ for the next generation of College Students</p>
 <p align="center"><b>Avinash Nishad</b></p>
